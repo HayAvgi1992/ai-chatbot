@@ -1,6 +1,10 @@
 import {
   extractReasoningMiddleware,
   wrapLanguageModel,
+  LanguageModelV1,
+  StreamingTextGenerationMethod,
+  TextGenerationMethod,
+  RunnerMethod,
 } from 'ai';
 import { isTestEnvironment } from '../constants';
 import { anthropic, createAnthropic } from '@ai-sdk/anthropic';
@@ -10,35 +14,114 @@ const anthropicProvider = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// Create a function to get a TogetherAI model
-function togetherai(model: string) {
+// Create a wrapper for TogetherAI that conforms to the LanguageModelV1 interface
+function createTogetherAIModel(modelId: string): LanguageModelV1 {
   return {
-    async chat({ messages }: { messages: Array<{ role: string; content: string }> }) {
-      // This uses your existing TOGETHER_AI_API_KEY from .env
-      try {
-        const response = await fetch('https://api.together.xyz/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.TOGETHER_AI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model,
-            messages,
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error(`TogetherAI error: ${response.status}`);
+    specificationVersion: 'v1',
+    provider: {
+      id: 'togetherai',
+      brand: 'TogetherAI',
+    },
+    modelId,
+    defaultObjectGenerationMode: 'json',
+    supportedFeatures: {
+      streamingTextGeneration: true,
+      textGeneration: true,
+    },
+    objectGenerationMethods: {},
+    
+    textGenerationMethods: {
+      generate: (async ({ prompt, ...params }) => {
+        try {
+          const response = await fetch('https://api.together.xyz/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.TOGETHER_AI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelId,
+              messages: [{ role: 'user', content: prompt }],
+              stream: false,
+              ...params,
+            }),
+          });
+          
+          if (!response.ok) {
+            throw new Error(`TogetherAI error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          return { text: data.choices[0].message.content };
+        } catch (error) {
+          console.error('TogetherAI error:', error);
+          throw error;
         }
-        
-        const data = await response.json();
-        return data.choices[0].message;
-      } catch (error) {
-        console.error('TogetherAI error:', error);
-        throw error;
-      }
-    }
+      }) as TextGenerationMethod,
+
+      stream: (async ({ prompt, ...params }, { signal, onToken }) => {
+        let done = false;
+        try {
+          const response = await fetch('https://api.together.xyz/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.TOGETHER_AI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelId,
+              messages: [{ role: 'user', content: prompt }],
+              stream: true,
+              ...params,
+            }),
+            signal,
+          });
+          
+          if (!response.ok) {
+            throw new Error(`TogetherAI error: ${response.status}`);
+          }
+          
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error('Response body stream not available');
+          
+          const decoder = new TextDecoder();
+          let text = '';
+          
+          while (!done) {
+            const { done: streamDone, value } = await reader.read();
+            if (streamDone) {
+              done = true;
+              break;
+            }
+            
+            const chunk = decoder.decode(value, { stream: true });
+            // Parse SSE chunk and extract content
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  const content = data.choices[0]?.delta?.content || '';
+                  if (content) {
+                    text += content;
+                    onToken({ text: content });
+                  }
+                } catch (e) {
+                  console.error('Error parsing SSE chunk:', e);
+                }
+              }
+            }
+          }
+          
+          return { text };
+        } catch (error) {
+          console.error('TogetherAI streaming error:', error);
+          throw error;
+        }
+      }) as StreamingTextGenerationMethod,
+    },
+    
+    runnerMethods: {} as Record<string, RunnerMethod>,
   };
 }
 
@@ -47,15 +130,50 @@ export const myProvider = {
   languageModel: (modelName: string) => {
     // Handle Anthropic Claude models
     if (modelName.startsWith('claude-')) {
+      // Use simple base names without version dates
+      // Anthropic API shows these are supported in newer versions
+      const modelVersionMap: Record<string, string> = {
+        'claude-3-sonnet': 'claude-3-5-sonnet-20241022',
+      };
+      
+      // Use the cleaned model name
+      const actualModelName = modelVersionMap[modelName] || modelName;
+      
+      console.log("Using Anthropic model:", actualModelName);
+      
       // Use the AI SDK's Anthropic provider
-      return anthropicProvider(modelName);
+      return anthropicProvider(actualModelName);
     }
     
-    // For other models, use TogetherAI
-    return togetherai(
-      modelName === 'chat-model-reasoning'
-        ? 'mistralai/Mixtral-8x7B-Instruct-v0.1' 
-        : 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-    );
+    // For other models, fix the TogetherAI model to properly implement doGenerate
+    if (modelName === 'chat-model' || modelName === 'chat-model-reasoning') {
+      const togetherModel = createTogetherAIModel(
+        'mistralai/Mixtral-8x7B-Instruct-v0.1'
+      );
+      
+      // Add the missing doGenerate function
+      const enhancedModel = {
+        ...togetherModel,
+        doGenerate: async function(prompt: string, options?: any) {
+          const result = await togetherModel.textGenerationMethods.generate({
+            prompt,
+            ...options
+          });
+          return result;
+        },
+        doStream: async function(prompt: string, options?: any) {
+          const { signal, onToken } = options || {};
+          return togetherModel.textGenerationMethods.stream(
+            { prompt, ...options },
+            { signal, onToken: onToken || (() => {}) }
+          );
+        }
+      };
+      
+      return enhancedModel;
+    }
+    
+    // For any other models, use default TogetherAI
+    return createTogetherAIModel('mistralai/Mixtral-8x7B-Instruct-v0.1');
   },
 };

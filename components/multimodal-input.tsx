@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
+import { nanoid } from 'nanoid';
 
 import { ArrowUpIcon, PaperclipIcon, StopIcon, SearchIcon } from './icons';
 import { PreviewAttachment } from './preview-attachment';
@@ -27,6 +28,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import { webSearchPrompt } from '@/lib/ai/prompts';
+import { anthropic } from '@ai-sdk/anthropic';
+import { streamText } from 'ai';
 
 function PureMultimodalInput({
   chatId,
@@ -100,236 +103,307 @@ function PureMultimodalInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleWebSearch = useCallback(async (searchInput?: string) => {
-    const queryInput = searchInput || input;
+  const handleWebSearch = useCallback(async (input: string): Promise<void> => {
+    if (!input.trim()) return;
     
-    if (queryInput.trim()) {
-      toast.loading('Searching the web...', { id: 'web-search-toast' });
-      
-      try {
-        /*
-        const response = await fetch('https://google.serper.dev/search', {
+    const id = nanoid();
+    setWebSearchActive(false);
+    
+    const toastId = 'web-search-toast';
+    toast.loading('Searching the web...', { id: toastId });
+    
+    try {
+      /*
+      // First fetch the search results
+      const response = await fetch(
+        'https://google.serper.dev/search',
+        {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-API-KEY': 'cc8a9b97abc4d9945867f9ddced1a42f0b26ce88',
           },
-          body: JSON.stringify({ q: queryInput }),
+          body: JSON.stringify({ q: input }),
         });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
 
-        const responseData = await response.json();
-        console.log('Serper API Response:', responseData);
-
-        // Transform the Serper API response to the format expected by webSearchPrompt
-        const transformedData = {
-          original_prompt: queryInput,
-          search_results: {
-            organic: responseData.organic ? responseData.organic.map((result: {
-              title?: string;
-              snippet?: string;
-              link?: string;
-            }) => ({
-              title: result.title || '',
-              snippet: result.snippet || '',
-              link: result.link || ''
-            })) : []
-          }
-        };
-        */
-        const transformedData ={
-          "original_prompt": "Who won the men's last world cup in 2022 on soccer?",
-          "search_results": {
-              "organic": [
-                  {
-                      "title": "2022 FIFA World Cup - Wikipedia",
-                      "snippet": "Argentina were crowned the champions after winning the final against the ... Of the 32 nations qualified to play at the 2022 FIFA World Cup, 24 countries competed ...",
-                      "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup"
-                  },
-                  {
-                      "title": "The Moment When Argentina Won The 2022 FIFA World Cup",
-                      "snippet": "The Moment When Argentina Won The 2022 FIFA World Cup · Comments857.",
-                      "link": "https://www.youtube.com/watch?v=EROb-E23ZVs&pp=0gcJCdgAo7VqN5tD"
-                  },
-                  {
-                      "title": "How Argentina won the 2022 World Cup, in their own words - ESPN",
-                      "snippet": "On Dec. 18, 2022, Argentina won the men's World Cup in the most dramatic way possible, beating France in a penalty shootout after a breathless 3-3 draw.",
-                      "link": "https://www.espn.com/soccer/story/_/id/39121682/how-argentina-won-2022-world-cup-their-own-words"
-                  },
-                  {
-                      "title": "FIFA World Cup Qatar 2022™",
-                      "snippet": "The FIFA World Cup Qatar 2022™ was played from 20 November to 18 December 2022. 32 teams competed across 64 matches in the 22nd edition of the tournament.",
-                      "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022"
-                  },
-                  {
-                      "title": "FIFA Men's World Cup Winners List | FOX Sports",
-                      "snippet": "See our comprehensive FIFA Men's World Cup history guide for everything you need about the tournament. FIFA Men's World Cup results and which countries have ...",
-                      "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/history"
-                  },
-                  {
-                      "title": "2022 FIFA World Cup | Qatar, Controversy, Stadiums, Winner, & Final",
-                      "snippet": "Argentina won its third World Cup victory in the tournament after defeating France in the final match.",
-                      "link": "https://www.britannica.com/sports/2022-FIFA-World-Cup"
-                  },
-                  {
-                      "title": "Argentina vs. France Highlights | 2022 FIFA World Cup Final",
-                      "snippet": "... 2022 FIFA World Cup Final https://youtu.be/Mxkg3qLIPC8 FOX Soccer https://www.youtube.com/user/Foxsoccer.",
-                      "link": "https://www.youtube.com/watch?v=Mxkg3qLIPC8"
-                  },
-                  {
-                      "title": "World Cup Football Winners List - Topend Sports",
-                      "snippet": "Here are the full list of winners of the previous men's FIFA World Cups. Brazil has won the most titles, and Italy and Brazil are the only countries to win back ...",
-                      "link": "https://www.topendsports.com/events/worldcupsoccer/winners.htm"
-                  },
-                  {
-                      "title": "Mbappe v Messi: The FIFA World Cup 2022 Final - YouTube",
-                      "snippet": "Mbappe v Messi: The FIFA World Cup 2022 Final. 2.9M views · 1 ... Comments1.3K. Test Test. The day that football won. Forever. 7:39 · Go to ...",
-                      "link": "https://www.youtube.com/watch?v=z_AZwdFg6uA"
-                  }
-              ]
-          }
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
-        // Create the prompt using the webSearchPrompt function
-        const prompt = webSearchPrompt(transformedData);
-
-        console.log('Prompt:', prompt);
-
-        // Generate a UUID for the message
-        const messageId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-
-        // Use a direct approach with a single API call for the search
-        // No need to append the user message - this was already done in submitForm
-        const requestBody = {
-          id: chatId,
-          selectedChatModel: 'chat-model-reasoning',
-          selectedVisibilityType: 'public',
-          message: {
-            id: messageId,
-            role: 'user',
-            content: prompt,
-            parts: [{ type: 'text', text: prompt }],
-            createdAt: new Date().toISOString(),
-          }
-        };
-        
-        console.log("Request Body:", requestBody);
-        console.log("Making a SINGLE API call to /api/chat");
-        
-        // Send the prompt to the LLM and get its response
-        console.log("Starting API request with timeout handling");
-        
-        // Set a longer timeout for the fetch request
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-        
-        try {
-          const llmResponse = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
+    
+      
+      const searchData = await response.json();
+      */
+      const searchData = {
+        "status": 200,
+        "statusText": "",
+        "data": {
+            "searchParameters": {
+                "q": "Who won the men's last world cup in 2022 on soccer?",
+                "type": "search",
+                "engine": "google"
             },
-            body: JSON.stringify(requestBody),
-            signal: controller.signal
-          });
-          
-          // Clear the timeout since the request completed
-          clearTimeout(timeoutId);
-          
-          console.log("LLM Response status:", llmResponse.status);
-          
-          if (!llmResponse.ok) {
-            const errorText = await llmResponse.text();
-            console.error('LLM Response Error:', errorText);
-            
-            // Update toast with specific error message
-            if (llmResponse.status === 400) {
-              toast.error('Invalid request format. Please try again.', { id: 'web-search-toast' });
-            } else {
-              toast.error(`Failed to get response (${llmResponse.status})`, { id: 'web-search-toast' });
-            }
-            
-            throw new Error(`Failed to get LLM response: ${errorText}`);
-          }
-
-          // Get the complete response text as a stream
-          const reader = llmResponse.body?.getReader();
-          if (!reader) {
-            throw new Error("Response body stream not available");
-          }
-          
-          let responseText = '';
-          let decoder = new TextDecoder();
-          
-          console.log("Starting to read response stream");
-          
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            responseText += chunk;
-            console.log("Received chunk:", chunk.length, "bytes");
-          }
-          
-          // Final decoding to handle any remaining bytes
-          const finalChunk = decoder.decode();
-          if (finalChunk) responseText += finalChunk;
-          
-          console.log("Complete response text length:", responseText.length);
-          console.log("Response text sample:", responseText.substring(0, 200) + "...");
-          
-          // Parse the streaming response
-          const finalContent = parseModelResponse(responseText);
-          console.log('Parsed Content:', finalContent);
-          
-          // Check if the response is an error message
-          if (finalContent.includes("Oops, an error occurred") || finalContent.length < 50) {
-            console.error("Error response detected:", finalContent);
-            toast.error('The AI model returned an error. Please try a different search.', { id: 'web-search-toast' });
-            
-            // Display the error to the user in the chat
-            if (typeof window !== 'undefined') {
-              requestAnimationFrame(async () => {
-                // Append a message explaining the error
-                await append({
-                  content: `Sorry, I encountered an error when processing your web search. Please try a different search query or try again later.`,
-                  role: 'assistant',
-                  parts: [{ type: 'text', text: `Sorry, I encountered an error when processing your web search. Please try a different search query or try again later.` }]
-                });
-              });
-            }
-            
-            return { status: 'error' };
-          }
-          
-          // The response is already being added to the chat by the API
-          
-          toast.success('Web search completed successfully!', { id: 'web-search-toast' });
-          return { status: 'success' };
-        } catch (error) {
-          // Clear the timeout if there was an error
-          clearTimeout(timeoutId);
-          
-          if (error instanceof Error && error.name === 'AbortError') {
-            console.error('Request timed out after 30 seconds');
-            toast.error('Request timed out. Please try again.', { id: 'web-search-toast' });
-          } else {
-            console.error('Error:', error);
-            toast.error('Failed to perform web search', { id: 'web-search-toast' });
-          }
-          
-          return { status: 'error' };
+            "answerBox": {
+                "snippet": "2022 FIFA World Cup final\nLusail Stadium hosted the final.\n\nEvent\n2022 FIFA World Cup\nArgentina France 3 3\n\nAfter extra time Argentina won 4–2 on penalties\n\nDate\n18 December 2022",
+                "title": "2022 FIFA World Cup final - Wikipedia",
+                "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_final"
+            },
+            "organic": [
+                {
+                    "title": "2022 FIFA World Cup - Wikipedia",
+                    "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup",
+                    "snippet": "Argentina were crowned the champions after winning the final against the ... Of the 32 nations qualified to play at the 2022 FIFA World Cup, 24 countries competed ...",
+                    "sitelinks": [
+                        {
+                            "title": "Final",
+                            "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_final"
+                        },
+                        {
+                            "title": "Qatar 2022 FIFA World Cup bid",
+                            "link": "https://en.wikipedia.org/wiki/Qatar_2022_FIFA_World_Cup_bid"
+                        },
+                        {
+                            "title": "How qualifying",
+                            "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_qualification"
+                        },
+                        {
+                            "title": "Bidding process",
+                            "link": "https://en.wikipedia.org/wiki/2018_and_2022_FIFA_World_Cup_bids"
+                        }
+                    ],
+                    "position": 1
+                },
+                {
+                    "title": "The Moment When Argentina Won The 2022 FIFA World Cup",
+                    "link": "https://www.youtube.com/watch?v=EROb-E23ZVs&pp=0gcJCdgAo7VqN5tD",
+                    "snippet": "The Moment When Argentina Won The 2022 FIFA World Cup · Comments857.",
+                    "date": "May 23, 2024",
+                    "position": 2
+                },
+                {
+                    "title": "How Argentina won the 2022 World Cup, in their own words - ESPN",
+                    "link": "https://www.espn.com/soccer/story/_/id/39121682/how-argentina-won-2022-world-cup-their-own-words",
+                    "snippet": "On Dec. 18, 2022, Argentina won the men's World Cup in the most dramatic way possible, beating France in a penalty shootout after a breathless 3-3 draw.",
+                    "date": "Dec 18, 2023",
+                    "position": 3
+                },
+                {
+                    "title": "FIFA World Cup Qatar 2022™",
+                    "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022",
+                    "snippet": "The FIFA World Cup Qatar 2022™ was played from 20 November to 18 December 2022. 32 teams competed across 64 matches in the 22nd edition of the tournament.",
+                    "sitelinks": [
+                        {
+                            "title": "Knockout and Groups",
+                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/knockout-and-groups"
+                        },
+                        {
+                            "title": "Scores & Fixtures",
+                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/scores-fixtures"
+                        },
+                        {
+                            "title": "FIFA World Cup Trophy Tour",
+                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/fifaworldcuptrophytour"
+                        },
+                        {
+                            "title": "Highlights",
+                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/qatar-highlights"
+                        }
+                    ],
+                    "position": 4
+                },
+                {
+                    "title": "FIFA Men's World Cup Winners List | FOX Sports",
+                    "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/history",
+                    "snippet": "See our comprehensive FIFA Men's World Cup history guide for everything you need about the tournament. FIFA Men's World Cup results and which countries have ...",
+                    "sitelinks": [
+                        {
+                            "title": "Schedule",
+                            "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/scores"
+                        },
+                        {
+                            "title": "Argentina Team News - Soccer",
+                            "link": "https://www.foxsports.com/soccer/argentina-men-team"
+                        },
+                        {
+                            "title": "France Team News - Soccer",
+                            "link": "https://www.foxsports.com/soccer/france-men-team"
+                        },
+                        {
+                            "title": "Awards",
+                            "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/awards"
+                        }
+                    ],
+                    "position": 5
+                },
+                {
+                    "title": "2022 FIFA World Cup | Qatar, Controversy, Stadiums, Winner, & Final",
+                    "link": "https://www.britannica.com/sports/2022-FIFA-World-Cup",
+                    "snippet": "Argentina won its third World Cup victory in the tournament after defeating France in the final match.",
+                    "date": "Apr 15, 2025",
+                    "position": 6
+                },
+                {
+                    "title": "Argentina vs. France Highlights | 2022 FIFA World Cup Final",
+                    "link": "https://www.youtube.com/watch?v=Mxkg3qLIPC8",
+                    "snippet": "... 2022 FIFA World Cup Final https://youtu.be/Mxkg3qLIPC8 FOX Soccer https://www.youtube.com/user/Foxsoccer.",
+                    "date": "Dec 18, 2022",
+                    "position": 7
+                },
+                {
+                    "title": "World Cup Football Winners List - Topend Sports",
+                    "link": "https://www.topendsports.com/events/worldcupsoccer/winners.htm",
+                    "snippet": "Here are the full list of winners of the previous men's FIFA World Cups. Brazil has won the most titles, and Italy and Brazil are the only countries to win back ...",
+                    "sitelinks": [
+                        {
+                            "title": "North America 2026 FIFA...",
+                            "link": "https://www.topendsports.com/events/worldcupsoccer/hosts/2026/index.htm"
+                        },
+                        {
+                            "title": "Brazil",
+                            "link": "https://www.topendsports.com/events/worldcupsoccer/countries/brazil.htm"
+                        },
+                        {
+                            "title": "Germany",
+                            "link": "https://www.topendsports.com/events/worldcupsoccer/countries/germany.htm"
+                        },
+                        {
+                            "title": "Uruguay",
+                            "link": "https://www.topendsports.com/events/worldcupsoccer/countries/uruguay.htm"
+                        }
+                    ],
+                    "position": 8
+                },
+                {
+                    "title": "Mbappe v Messi: The FIFA World Cup 2022 Final - YouTube",
+                    "link": "https://www.youtube.com/watch?v=z_AZwdFg6uA",
+                    "snippet": "Mbappe v Messi: The FIFA World Cup 2022 Final. 2.9M views · 1 ... Comments1.3K. Test Test. The day that football won. Forever. 7:39 · Go to ...",
+                    "date": "Mar 16, 2024",
+                    "position": 9
+                }
+            ],
+            "peopleAlsoAsk": [
+                {
+                    "question": "Who won the last World Cup in 2022?",
+                    "snippet": "Argentina national football team\n2022 World Cup / Champion"
+                },
+                {
+                    "question": "What men's team won the last World Cup?",
+                    "snippet": "Men's World Cup titles won from 1930 to 2022, by country\nyear\nresult\n\n2010\nSpain*\n0\n2014\nGermany*\n0\n2018\nFrance\n2\n2022\nArgentina**\n3",
+                    "title": "World Cup | History & Winners - Britannica",
+                    "link": "https://www.britannica.com/sports/World-Cup-football"
+                }
+            ],
+            "relatedSearches": [
+                {
+                    "query": "2022 World Cup"
+                },
+                {
+                    "query": "2022 FIFA World Cup final"
+                },
+                {
+                    "query": "World Cup 2022 winner"
+                },
+                {
+                    "query": "2022 World Cup"
+                },
+                {
+                    "query": "When did Argentina win the World Cup 2022"
+                },
+                {
+                    "query": "World Cup Final 2022 Full Match"
+                },
+                {
+                    "query": "World Cup final viewers worldwide 2022"
+                },
+                {
+                    "query": "Who won the World Cup 2023"
+                },
+                {
+                    "query": "FIFA World Cup 2022 Qualifiers"
+                }
+            ],
+            "credits": 1
         }
-      } catch (error) {
-        console.error('Error during webhook call:', error);
-        toast.error('Failed to perform web search', { id: 'web-search-toast' });
-        return { status: 'error' };
-      }
     }
-  }, [input, chatId, append]);
-  
+      console.log('Web search response:', {
+        status: searchData.status,
+        statusText: searchData.statusText,
+        data: searchData.data
+      });
+      
+      // Format search results for the user
+      const formattedResults = formatSearchResults(searchData.data);
+      
+      // Append the search results to the chat
+      append({
+        id,
+        content: formattedResults,
+        role: 'user'
+      });
+      
+      // Now use your existing chat API endpoint
+      toast.loading('Processing with Claude...', { id: toastId });
+      
+      // Generate a UUID for the message
+      const messageId = nanoid();
+      
+      // Create a request body for your API endpoint
+      const requestBody = {
+        id: chatId,
+        selectedChatModel: 'claude-3-sonnet',  
+        selectedVisibilityType: 'public',
+        message: {
+          id: messageId,
+          role: 'user',
+          content: `Web search results for "${input}":\n\n${formattedResults}\n\nBased on these search results, please provide a concise answer to: ${input}`,
+          parts: [{ 
+            type: 'text', 
+            text: `Web search results for "${input}":\n\n${formattedResults}\n\nBased on these search results, please provide a concise answer to: ${input}` 
+          }],
+          createdAt: new Date().toISOString(),
+        }
+      };
+      
+      // Send the search results to your existing chat API
+      const llmResponse = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      if (!llmResponse.ok) {
+        const errorText = await llmResponse.text();
+        throw new Error(`Failed to get LLM response: ${errorText}`);
+      }
+      
+      toast.success('Web search completed', { id: toastId });
+    } catch (error) {
+      console.error('Web search error:', error);
+      toast.error(error instanceof Error ? error.message : 'An unknown error occurred', { id: toastId });
+    }
+  }, [append, chatId]);
+
+  // Helper function to format search results
+  const formatSearchResults = (searchData: any): string => {
+    if (!searchData || !searchData.results || !Array.isArray(searchData.results)) {
+      return 'No search results found.';
+    }
+    
+    const results = searchData.results.slice(0, 3); // Take top 3 results
+    
+    return `
+Here are the search results for your query:
+
+${results.map((result: any, index: number) => `
+[Result ${index + 1}]
+Title: ${result.title || 'No title'}
+Snippet: ${result.snippet || 'No description'}
+URL: ${result.link || 'No link'}
+`).join('\n')}
+    `;
+  };
+
   useEffect(() => {
     setLocalStorageInput(input);
   }, [input, setLocalStorageInput]);
@@ -353,18 +427,16 @@ function PureMultimodalInput({
         role: 'user',
       });
       
-      console.log("2. handleWebSearch called - will make a second API call");
-      // Second API call: perform web search with the input
+      console.log("2. handleWebSearch called - will process the search");
+      // Perform web search with the input
       handleWebSearch(input)
-        .then((result) => {
-          // Don't reset webSearchActive - keep the button active
-          // Let user manually toggle it off when they want to stop using web search
+        .then(() => {
+          console.log("Web search completed successfully");
         })
         .catch(error => {
           console.error("Web search failed:", error);
           // Show error toast if not already shown
           toast.error('Web search failed. You can try again.', { id: 'web-search-toast' });
-          // Don't reset automatically on error either
         });
       
       // Clear input field immediately so user can type a new message
@@ -464,8 +536,6 @@ function PureMultimodalInput({
     }
   }, [status, scrollToBottom]);
 
-
-
   return (
     <div className="relative w-full flex flex-col gap-4">
       <AnimatePresence>
@@ -564,7 +634,7 @@ function PureMultimodalInput({
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
         <WebSearchButton 
           input={input} 
-          handleWebSearch={() => setWebSearchActive(true)} 
+          handleWebSearch={() => setWebSearchActive(!webSearchActive)} 
           status={status}
           isActive={webSearchActive}
         />
