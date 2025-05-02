@@ -55,6 +55,7 @@ export function Chat({
       id,
       message: body.messages.at(-1),
       selectedChatModel,
+      selectedVisibilityType,
     }),
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));

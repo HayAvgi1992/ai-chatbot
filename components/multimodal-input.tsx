@@ -57,6 +57,7 @@ function PureMultimodalInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
+  const [webSearchActive, setWebSearchActive] = useState(false);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -95,6 +96,119 @@ function PureMultimodalInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleWebSearch = useCallback(async (searchInput?: string) => {
+    const queryInput = searchInput || input;
+    
+    if (queryInput.trim()) {
+      toast.loading('Searching the web...', { id: 'web-search-toast' });
+      
+      try {
+        // Use a consistent timestamp format
+        const timestamp = new Date().toISOString();
+        
+        /*
+        // Send the prompt to the webhook
+        const response = await fetch('https://hook.eu2.make.com/vb782vd49hrwzry8ia5rcse3ax3m8d2a', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: input,
+            timestamp,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const responseData = await response.json();
+        console.log('Make.com Webhook Response:', responseData);
+
+        // Create the prompt using the webSearchPrompt function
+        const prompt = webSearchPrompt(responseData);
+        */
+        
+         const prompt = `User asked: "${queryInput}"
+
+I performed a Google search and found these results:
+
+1. What are the 5 most popular sports in the USA? - STATSCORE
+   What are the 5 most popular sports in the USA? · 1. American football (NFL) · 2. Baseball (MLB) · 3. Basketball (NBA) · 4. Ice hockey (NHL) · 5. Soccer (MLS).
+   (https://www.statscore.com/market-research/what-are-the-5-most-popular-sports-in-the-usa/)
+
+2. Sports in the United States - Wikipedia
+   Overview. The most popular team sports in the United States are American football, baseball, basketball, ice hockey, and soccer.
+   (https://en.wikipedia.org/wiki/Sports_in_the_United_States)
+
+3. Football Retains Dominant Position as Favorite U.S. Sport
+   Football remains Americans' favorite sport to watch, with baseball and basketball a distant second.
+   (https://news.gallup.com/poll/610046/football-retains-dominant-position-favorite-sport.aspx)
+
+Based on these sources, answer the user's question in a clear, concise, and accurate way.`;
+
+        console.log('Prompt:', prompt);
+
+        // Generate a UUID for the message
+        const messageId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+        const requestBody = {
+          id: chatId,
+          selectedChatModel: 'chat-model',
+          selectedVisibilityType: 'public',
+          message: {
+            id: messageId,
+            role: 'user',
+            content: prompt,
+            parts: [{ type: 'text', text: prompt }],
+            createdAt: new Date().toISOString(),
+          }
+        }
+        console.log("Request Body: ", requestBody);
+        // Send the prompt to the LLM and get its response
+        const llmResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!llmResponse.ok) {
+          const errorText = await llmResponse.text();
+          console.error('LLM Response Error:', errorText);
+          throw new Error(`Failed to get LLM response: ${errorText}`);
+        }
+
+        // Get the response text
+        const responseText = await llmResponse.text();
+        console.log('LLM Response:', responseText);
+
+        // Parse the streaming response
+        const finalContent = parseModelResponse(responseText);
+        console.log('Parsed Content:', finalContent);
+
+        // Use requestAnimationFrame to ensure we're in the browser context
+        if (typeof window !== 'undefined') {
+          requestAnimationFrame(async () => {
+            // Append the response to the chat
+            await append({
+              content: finalContent,
+              role: 'assistant',
+            });
+          });
+        }
+
+        toast.success('Web search completed successfully!');
+        return { status: 'success' };
+      } catch (error) {
+        console.error('Error:', error);
+        toast.error('Failed to perform web search');
+        throw error;
+      }
+    }
+  }, [input, append, chatId]);
+  
   useEffect(() => {
     setLocalStorageInput(input);
   }, [input, setLocalStorageInput]);
@@ -109,10 +223,21 @@ function PureMultimodalInput({
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, '', `/chat/${chatId}`);
-
-    handleSubmit(undefined, {
-      experimental_attachments: attachments,
-    });
+    if (webSearchActive) {
+      append({
+        content: input,
+        role: 'user',
+      });
+      console.log("handleWebSearch called");
+      handleWebSearch(input);
+      
+      setWebSearchActive(false);
+    } else {
+      console.log("handleSubmit called");
+      handleSubmit(undefined, {
+        experimental_attachments: attachments,
+      });
+    }
 
     setAttachments([]);
     setLocalStorageInput('');
@@ -128,6 +253,10 @@ function PureMultimodalInput({
     setLocalStorageInput,
     width,
     chatId,
+    webSearchActive,
+    append,
+    input,
+    handleWebSearch,
   ]);
 
   const uploadFile = async (file: File) => {
@@ -191,116 +320,7 @@ function PureMultimodalInput({
     }
   }, [status, scrollToBottom]);
 
-  const handleWebSearch = useCallback(async () => {
-    if (input.trim()) {
-      // Show loading toast
-      toast.loading('Searching the web...', { id: 'web-search-toast' });
-      
-      try {
-        // Use a consistent timestamp format
-        const timestamp = new Date().toISOString();
-        
-        /*
-        // Send the prompt to the webhook
-        const response = await fetch('https://hook.eu2.make.com/vb782vd49hrwzry8ia5rcse3ax3m8d2a', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: input,
-            timestamp,
-          }),
-        });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        console.log('Make.com Webhook Response:', responseData);
-
-        // Create the prompt using the webSearchPrompt function
-        const prompt = webSearchPrompt(responseData);
-        */
-        
-        const prompt = `User asked: "what is the most popular sport in the USA?"
-
-I performed a Google search and found these results:
-
-1. What are the 5 most popular sports in the USA? - STATSCORE
-   What are the 5 most popular sports in the USA? · 1. American football (NFL) · 2. Baseball (MLB) · 3. Basketball (NBA) · 4. Ice hockey (NHL) · 5. Soccer (MLS).
-   (https://www.statscore.com/market-research/what-are-the-5-most-popular-sports-in-the-usa/)
-
-2. Sports in the United States - Wikipedia
-   Overview. The most popular team sports in the United States are American football, baseball, basketball, ice hockey, and soccer.
-   (https://en.wikipedia.org/wiki/Sports_in_the_United_States)
-
-3. Football Retains Dominant Position as Favorite U.S. Sport
-   Football remains Americans' favorite sport to watch, with baseball and basketball a distant second.
-   (https://news.gallup.com/poll/610046/football-retains-dominant-position-favorite-sport.aspx)
-
-Based on these sources, answer the user's question in a clear, concise, and accurate way.`;
-
-        console.log('Prompt:', prompt);
-
-        // Generate a UUID for the message
-        const messageId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-
-        // Send the prompt to the LLM and get its response
-        const llmResponse = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            id: chatId,
-            selectedChatModel: 'chat-model',
-            selectedVisibilityType: 'public',
-            message: {
-              id: messageId,
-              role: 'user',
-              content: prompt,
-              parts: [{ type: 'text', text: prompt }],
-              createdAt: new Date(),
-            }
-          }),
-        });
-
-        if (!llmResponse.ok) {
-          const errorText = await llmResponse.text();
-          console.error('LLM Response Error:', errorText);
-          throw new Error(`Failed to get LLM response: ${errorText}`);
-        }
-
-        // Get the response text
-        const responseText = await llmResponse.text();
-        console.log('LLM Response:', responseText);
-
-        // Parse the streaming response
-        const finalContent = parseModelResponse(responseText);
-        console.log('Parsed Content:', finalContent);
-
-        // Use requestAnimationFrame to ensure we're in the browser context
-        if (typeof window !== 'undefined') {
-          requestAnimationFrame(async () => {
-            // Append the response to the chat
-            await append({
-              content: finalContent,
-              role: 'assistant',
-            });
-          });
-        }
-
-        toast.success('Web search completed successfully!');
-        return { status: 'success' };
-      } catch (error) {
-        console.error('Error:', error);
-        toast.error('Failed to perform web search');
-        throw error;
-      }
-    }
-  }, [input, append, chatId]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
@@ -398,8 +418,12 @@ Based on these sources, answer the user's question in a clear, concise, and accu
 
       <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start gap-2">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
-        <WebSearchButton input={input} handleWebSearch={handleWebSearch} status={status}/>
-           
+        <WebSearchButton 
+          input={input} 
+          handleWebSearch={() => setWebSearchActive(!webSearchActive)} 
+          status={status}
+          isActive={webSearchActive}
+        />
       </div>
 
       <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
@@ -512,24 +536,31 @@ function PureWebSearchButton({
   input,
   handleWebSearch,
   status,
+  isActive,
 }: {
   input: string;
   handleWebSearch: () => void;
   status: UseChatHelpers['status'];
+  isActive: boolean;
 }) {
   return (
     <Button
       data-testid="web-search-button"
-      className="rounded-md rounded-bl-lg p-[7px] h-fit dark:border-white border-black hover:dark:bg-zinc-900 hover:bg-zinc-200"
+      className={cx(
+        "rounded-md rounded-bl-lg p-[7px] h-fit dark:border-white border-black hover:dark:bg-zinc-900 hover:bg-zinc-200",
+        isActive && "bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 hover:dark:bg-blue-700 text-white"
+      )}
       onClick={(event) => {
         event.preventDefault();
         handleWebSearch();
       }}
-      disabled={status !== 'ready' || !input.trim()}
+      disabled={status !== 'ready'}
       variant="outline"
     >
-      <SearchIcon size={14} />
-      Web Search
+      <div className="flex items-center">
+        <SearchIcon size={14} />
+        <span className="ml-1">{isActive ? "Web Search Active" : "Web Search"}</span>
+      </div>
     </Button>
   );
 }

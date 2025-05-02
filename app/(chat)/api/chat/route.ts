@@ -34,16 +34,18 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
+    console.log("JSON: ", json);
     requestBody = postRequestBodySchema.parse(json);
   } catch (_) {
     return new Response('Invalid request body', { status: 400 });
   }
 
   try {
+    console.log("Request Body: ", requestBody);
     const { id, message, selectedChatModel } = requestBody;
     
     
-    console.log("Details ", id, message, selectedChatModel);
+    //console.log("Details ", id, message, selectedChatModel);
     const session = await auth();
     if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
