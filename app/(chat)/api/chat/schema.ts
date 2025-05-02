@@ -40,6 +40,8 @@ export const postRequestBodySchema = z.object({
     'claude-3-5-sonnet-20241022'
   ]),
   selectedVisibilityType: z.enum(['public', 'private']),
+  saveUserMessage: z.boolean().default(true),
+  addMessageToModel: z.boolean().default(true),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

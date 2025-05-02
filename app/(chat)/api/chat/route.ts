@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, selectedChatModel } = requestBody;
+    const { id, message, selectedChatModel, saveUserMessage = true, addMessageToModel = true } = requestBody;
     const session = await auth();
     if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
@@ -91,11 +91,22 @@ export async function POST(request: Request) {
 
     const previousMessages = await getMessagesByChatId({ id });
 
-    const messagesForModel = appendClientMessage({
-      // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
-      messages: previousMessages,
-      message,
-    });
+    // Determine the messages to send to the model based on addMessageToModel flag
+    let messagesForModel;
+    if (addMessageToModel) {
+      // Include the current user message in context
+      messagesForModel = appendClientMessage({
+        // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
+        messages: previousMessages,
+        message,
+      });
+    } else {
+      // Only use previous messages without adding the current one
+      // Make sure we have at least one message to prevent errors
+      messagesForModel = previousMessages.length > 0 
+        ? previousMessages 
+        : [{ role: 'system', content: 'You are a helpful assistant.' }];
+    }
 
     const { longitude, latitude, city, country } = geolocation(request);
 
@@ -106,18 +117,21 @@ export async function POST(request: Request) {
       country,
     };
 
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: message.id,
-          role: 'user',
-          parts: message.parts,
-          attachments: message.experimental_attachments ?? [],
-          createdAt: new Date(),
-        },
-      ],
-    });
+    // Only save the user message if saveUserMessage is true
+    if (saveUserMessage) {
+      await saveMessages({
+        messages: [
+          {
+            chatId: id,
+            id: message.id,
+            role: 'user',
+            parts: message.parts,
+            attachments: message.experimental_attachments ?? [],
+            createdAt: new Date(),
+          },
+        ],
+      });
+    }
 
     return createDataStreamResponse({
       execute: (dataStream) => {
@@ -135,7 +149,8 @@ export async function POST(request: Request) {
             experimental_activeTools:
               selectedChatModel === 'chat-model-reasoning' || 
               message.content.toLowerCase().includes('web search results') ||
-              message.content.includes('<search_results>')
+              message.content.includes('<search_results>') ||
+              !addMessageToModel // Disable tools when we're not adding message to model
                 ? []
                 : [
                     // Disable all automatic tools for web search responses
@@ -255,3 +270,4 @@ export async function DELETE(request: Request) {
     });
   }
 }
+

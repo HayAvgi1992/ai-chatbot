@@ -15,7 +15,6 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
-import { nanoid } from 'nanoid';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ArrowUpIcon, PaperclipIcon, StopIcon, SearchIcon } from './icons';
@@ -28,9 +27,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
-import { webSearchPrompt } from '@/lib/ai/prompts';
-import { anthropic } from '@ai-sdk/anthropic';
-import { streamText } from 'ai';
+
 
 function PureMultimodalInput({
   chatId,
@@ -100,29 +97,89 @@ function PureMultimodalInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Helper function to save a message directly to the chat
+  const saveMessageToChat = async (content: string, role: 'user' | 'assistant' = 'user') => {
+    try {
+      const messageId = uuidv4();
+      // Use the /api/chat/[id]/messages endpoint 
+      const response = await fetch(`/api/chat/${chatId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: messageId,
+          role: role,
+          content: content,
+          parts: [{ type: 'text', text: content }],
+          createdAt: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save message:', response.status);
+        return null;
+      }
+
+      const updatedMessages = await response.json();
+      setMessages(updatedMessages);
+      return messageId;
+    } catch (error) {
+      console.error('Error saving message:', error);
+      return null;
+    }
+  };
+
   const handleWebSearch = useCallback(async (input: string): Promise<void> => {
     console.log("handleWebSearch called - processing search for:", input);
+    const userMessageId = uuidv4();
     if (!input.trim()) return;
-    
+
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: userMessageId,
+        content: input,
+        role: 'user',
+        createdAt: new Date(),
+      }
+    ]);
+
+
     const toastId = 'web-search-toast';
     toast.loading('Searching the web...', { id: toastId });
     
     try {
-      // Generate IDs for our messages
-      const userMessageId = uuidv4();
-      const assistantId = uuidv4();
+
+      // Save the user's query message to the chat
+      await saveMessageToChat(input);
+    
+      // Make direct API call and handle streaming properly
+      //const addPromptToChatResponse = await fetch('/api/chat', {
+      //  method: 'POST',
+      //  headers: {
+      //    'Content-Type': 'application/json',
+      //  },
+      //  body: JSON.stringify({
+      //    id: chatId,
+      //    selectedChatModel: 'claude-3-sonnet',
+      //    selectedVisibilityType: 'private',
+      //    saveUserMessage: true,
+      //    addMessageToModel: false,
+      //    message: {
+      //      id: userMessageId, // Use a different ID for this "hidden" request
+      //      role: 'user',
+      //      content: input,
+      //      parts: [{ type: 'text', text: input }],
+      //      createdAt: new Date().toISOString(),
+      //    },
+      //  }),
+      //});
       
-      // First add the user's original query to the UI (the real message we want to show)
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: userMessageId,
-          content: input,
-          role: 'user',
-          createdAt: new Date(),
-        }
-      ]);
-      
+      //if (!addPromptToChatResponse.ok) {
+      //  throw new Error(`AI response failed: ${addPromptToChatResponse.statusText}`);
+      //}
+
       // First fetch the search results
       const response = await fetch(
         'https://google.serper.dev/search',
@@ -145,17 +202,6 @@ function PureMultimodalInput({
       // Format search results for the user
       const formattedResults = formatSearchResults(searchData);
       
-      // Add assistant placeholder message right away
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: assistantId,
-          content: "Analyzing search results...",
-          role: 'assistant',
-          createdAt: new Date(),
-        }
-      ]);
-      
       toast.loading('Processing with Claude...', { id: toastId });
       
       // Create formatted content with search results and instructions for Claude
@@ -174,7 +220,7 @@ YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
 User question: ${input}`;
 
       console.log("BEFORE SENDING TO SERVER");
-      
+    
       // Make direct API call and handle streaming properly
       const aiResponse = await fetch('/api/chat', {
         method: 'POST',
@@ -185,6 +231,8 @@ User question: ${input}`;
           id: chatId,
           selectedChatModel: 'claude-3-sonnet',
           selectedVisibilityType: 'private',
+          saveUserMessage: false, // Don't save the special prompt to chat history
+          addMessageToModel: true, // Still send the formatted content to the model
           message: {
             id: uuidv4(), // Use a different ID for this "hidden" request
             role: 'user',
@@ -203,8 +251,8 @@ User question: ${input}`;
       try {
         // Get the full response as text
         const responseText = await aiResponse.text();
-        console.log("Full response text:", responseText);
-        
+
+
         // Extract all the text chunks from the format 0:"text"
         let extractedContent = "";
         const contentMatches = responseText.matchAll(/0:"([^"]+)"/g);
@@ -218,44 +266,47 @@ User question: ${input}`;
         
         console.log("Extracted content:", extractedContent);
         
-        // If we got content, update the assistant message
+        // If we got content, save the assistant message
         if (extractedContent) {
-          setMessages((currentMessages) => 
-            currentMessages.map(msg => 
-              msg.id === assistantId 
-                ? { ...msg, content: extractedContent } 
-                : msg
-            )
-          );
+          setMessages((currentMessages) => [
+            ...currentMessages,
+            {
+              id: userMessageId,
+              content: extractedContent,
+              role: 'assistant',
+              createdAt: new Date(),
+            }
+          ]);
+
+          //await saveMessageToChat(extractedContent, 'assistant');
         } else {
           // Fallback if we couldn't extract content
-          setMessages((currentMessages) => 
-            currentMessages.map(msg => 
-              msg.id === assistantId 
-                ? { ...msg, content: "Based on the search results, I found information but couldn't format it properly. Please try again." } 
-                : msg
-            )
-          );
+          setMessages((currentMessages) => [
+            ...currentMessages,
+            {
+              id: userMessageId,
+              content: "Based on the search results, I found information but couldn't format it properly. Please try again.",
+              role: 'assistant',
+              createdAt: new Date(),
+            }
+          ]);
+          //await saveMessageToChat("Based on the search results, I found information but couldn't format it properly. Please try again.", 'assistant');
         }
+        
       } catch (error) {
         console.error("Error processing response:", error);
-        setMessages((currentMessages) => 
-          currentMessages.map(msg => 
-            msg.id === assistantId 
-              ? { ...msg, content: "Error processing the search results. Please try again." } 
-              : msg
-          )
-        );
+        await saveMessageToChat("Error processing the search results. Please try again.", 'assistant');
       }
-      
       toast.success('Web search completed', { id: toastId });
+           
     } catch (error) {
       console.error('Web search error:', error);
       toast.error(error instanceof Error ? error.message : 'An unknown error occurred', { id: toastId });
     } finally {
       setWebSearchActive(false);
     }
-  }, [setMessages, chatId]);
+
+  }, [setMessages, chatId, saveMessageToChat]);
 
   // Helper function to format search results
   const formatSearchResults = (searchData: any): string => {
