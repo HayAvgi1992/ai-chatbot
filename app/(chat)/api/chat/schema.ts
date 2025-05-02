@@ -26,20 +26,18 @@ export const postRequestBodySchema = z.object({
   selectedChatModel: z.enum([
     'chat-model', 
     'chat-model-reasoning',
-    // Claude base model names
+    // Claude models with accurate names
     'claude-3-haiku',
     'claude-3-sonnet',
     'claude-3-opus', 
+    // With hyphens (how users might input them)
     'claude-3-5-sonnet',
     'claude-3-7-sonnet',
+    // With periods (correct Anthropic format)
     'claude-3.5-sonnet',
     'claude-3.7-sonnet',
-    // Claude versioned model names
-    'claude-3-haiku-20240307',
-    'claude-3-sonnet-20240229',
-    'claude-3-opus-20240229',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-7-sonnet-20250219',
+    // Explicit versioned models
+    'claude-3-5-sonnet-20241022'
   ]),
   selectedVisibilityType: z.enum(['public', 'private']),
 });

@@ -196,7 +196,6 @@ export async function saveMessages({
   messages: Array<DBMessage>;
 }) {
   try {
-    console.log('Attempting to save messages:', messages);
     const result = await db.insert(message).values(messages);
     console.log('Successfully saved messages');
     return result;

@@ -33,7 +33,7 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are a friendly assistant! Keep your responses concise and helpful. When the user message includes web search results, use that information to provide an accurate response based on the search results. If the user message contains phrases like "I performed a Google search" or "Based on these sources", prioritize the information in those search results over your training data, especially for recent events or facts.';
+  'You are a friendly assistant! Keep your responses concise and helpful. IMPORTANT INSTRUCTION FOR SEARCH RESULTS: When the user message includes web search results, YOU MUST use ONLY that information to provide your response. NEVER claim you do not have access to real-time data when search results are provided. If you see content between tags like <search_results> or phrases like "Web search results" or "Based on these sources", this is CURRENT, REAL-TIME information that you MUST use for your response. Begin your response with "Based on the search results: " when answering questions with provided search data.';
 
 export interface RequestHints {
   latitude: Geo['latitude'];
@@ -53,12 +53,27 @@ About the origin of user's request:
 export const systemPrompt = ({
   selectedChatModel,
   requestHints,
+  messages = []
 }: {
   selectedChatModel: string;
   requestHints: RequestHints;
+  messages?: Array<{content: string}>;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
+  
+  // Check if the most recent message contains search results
+  const lastMessage = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+  const containsSearchResults = lastMessage?.content && 
+    (lastMessage.content.includes('<search_results>') || 
+     lastMessage.content.toLowerCase().includes('web search results'));
+  
+  if (containsSearchResults) {
+    // Special system prompt override for web search results
+    return `CRITICAL INSTRUCTION: You are receiving real-time web search results. Your ONLY task is to answer the user's question based EXCLUSIVELY on these search results. You MUST NOT claim you lack access to current information when search results are provided. Begin your response with "Based on the search results: " followed by the direct answer.
 
+${requestPrompt}`;
+  }
+  
   if (selectedChatModel === 'chat-model-reasoning') {
     return `${regularPrompt}\n\n${requestPrompt}`;
   } else {

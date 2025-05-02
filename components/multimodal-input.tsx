@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
 import { nanoid } from 'nanoid';
+import { v4 as uuidv4 } from 'uuid';
 
 import { ArrowUpIcon, PaperclipIcon, StopIcon, SearchIcon } from './icons';
 import { PreviewAttachment } from './preview-attachment';
@@ -63,10 +64,6 @@ function PureMultimodalInput({
   const [webSearchActive, setWebSearchActive] = useState(true);
 
   useEffect(() => {
-    console.log("webSearchActive changed to:", webSearchActive);
-  }, [webSearchActive]);
-
-  useEffect(() => {
     if (textareaRef.current) {
       adjustHeight();
     }
@@ -104,16 +101,25 @@ function PureMultimodalInput({
   }, []);
 
   const handleWebSearch = useCallback(async (input: string): Promise<void> => {
+    console.log("handleWebSearch called - processing search for:", input);
     if (!input.trim()) return;
-    
-    const id = nanoid();
-    setWebSearchActive(false);
     
     const toastId = 'web-search-toast';
     toast.loading('Searching the web...', { id: toastId });
     
     try {
-      /*
+      // Add user message to UI without triggering AI response
+      const userMessageId = uuidv4();
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: userMessageId,
+          content: input,
+          role: 'user',
+          createdAt: new Date(),
+        }
+      ]);
+      
       // First fetch the search results
       const response = await fetch(
         'https://google.serper.dev/search',
@@ -130,278 +136,222 @@ function PureMultimodalInput({
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
     
-      
       const searchData = await response.json();
-      */
-      const searchData = {
-        "status": 200,
-        "statusText": "",
-        "data": {
-            "searchParameters": {
-                "q": "Who won the men's last world cup in 2022 on soccer?",
-                "type": "search",
-                "engine": "google"
-            },
-            "answerBox": {
-                "snippet": "2022 FIFA World Cup final\nLusail Stadium hosted the final.\n\nEvent\n2022 FIFA World Cup\nArgentina France 3 3\n\nAfter extra time Argentina won 4–2 on penalties\n\nDate\n18 December 2022",
-                "title": "2022 FIFA World Cup final - Wikipedia",
-                "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_final"
-            },
-            "organic": [
-                {
-                    "title": "2022 FIFA World Cup - Wikipedia",
-                    "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup",
-                    "snippet": "Argentina were crowned the champions after winning the final against the ... Of the 32 nations qualified to play at the 2022 FIFA World Cup, 24 countries competed ...",
-                    "sitelinks": [
-                        {
-                            "title": "Final",
-                            "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_final"
-                        },
-                        {
-                            "title": "Qatar 2022 FIFA World Cup bid",
-                            "link": "https://en.wikipedia.org/wiki/Qatar_2022_FIFA_World_Cup_bid"
-                        },
-                        {
-                            "title": "How qualifying",
-                            "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_qualification"
-                        },
-                        {
-                            "title": "Bidding process",
-                            "link": "https://en.wikipedia.org/wiki/2018_and_2022_FIFA_World_Cup_bids"
-                        }
-                    ],
-                    "position": 1
-                },
-                {
-                    "title": "The Moment When Argentina Won The 2022 FIFA World Cup",
-                    "link": "https://www.youtube.com/watch?v=EROb-E23ZVs&pp=0gcJCdgAo7VqN5tD",
-                    "snippet": "The Moment When Argentina Won The 2022 FIFA World Cup · Comments857.",
-                    "date": "May 23, 2024",
-                    "position": 2
-                },
-                {
-                    "title": "How Argentina won the 2022 World Cup, in their own words - ESPN",
-                    "link": "https://www.espn.com/soccer/story/_/id/39121682/how-argentina-won-2022-world-cup-their-own-words",
-                    "snippet": "On Dec. 18, 2022, Argentina won the men's World Cup in the most dramatic way possible, beating France in a penalty shootout after a breathless 3-3 draw.",
-                    "date": "Dec 18, 2023",
-                    "position": 3
-                },
-                {
-                    "title": "FIFA World Cup Qatar 2022™",
-                    "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022",
-                    "snippet": "The FIFA World Cup Qatar 2022™ was played from 20 November to 18 December 2022. 32 teams competed across 64 matches in the 22nd edition of the tournament.",
-                    "sitelinks": [
-                        {
-                            "title": "Knockout and Groups",
-                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/knockout-and-groups"
-                        },
-                        {
-                            "title": "Scores & Fixtures",
-                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/scores-fixtures"
-                        },
-                        {
-                            "title": "FIFA World Cup Trophy Tour",
-                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/fifaworldcuptrophytour"
-                        },
-                        {
-                            "title": "Highlights",
-                            "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022/qatar-highlights"
-                        }
-                    ],
-                    "position": 4
-                },
-                {
-                    "title": "FIFA Men's World Cup Winners List | FOX Sports",
-                    "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/history",
-                    "snippet": "See our comprehensive FIFA Men's World Cup history guide for everything you need about the tournament. FIFA Men's World Cup results and which countries have ...",
-                    "sitelinks": [
-                        {
-                            "title": "Schedule",
-                            "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/scores"
-                        },
-                        {
-                            "title": "Argentina Team News - Soccer",
-                            "link": "https://www.foxsports.com/soccer/argentina-men-team"
-                        },
-                        {
-                            "title": "France Team News - Soccer",
-                            "link": "https://www.foxsports.com/soccer/france-men-team"
-                        },
-                        {
-                            "title": "Awards",
-                            "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/awards"
-                        }
-                    ],
-                    "position": 5
-                },
-                {
-                    "title": "2022 FIFA World Cup | Qatar, Controversy, Stadiums, Winner, & Final",
-                    "link": "https://www.britannica.com/sports/2022-FIFA-World-Cup",
-                    "snippet": "Argentina won its third World Cup victory in the tournament after defeating France in the final match.",
-                    "date": "Apr 15, 2025",
-                    "position": 6
-                },
-                {
-                    "title": "Argentina vs. France Highlights | 2022 FIFA World Cup Final",
-                    "link": "https://www.youtube.com/watch?v=Mxkg3qLIPC8",
-                    "snippet": "... 2022 FIFA World Cup Final https://youtu.be/Mxkg3qLIPC8 FOX Soccer https://www.youtube.com/user/Foxsoccer.",
-                    "date": "Dec 18, 2022",
-                    "position": 7
-                },
-                {
-                    "title": "World Cup Football Winners List - Topend Sports",
-                    "link": "https://www.topendsports.com/events/worldcupsoccer/winners.htm",
-                    "snippet": "Here are the full list of winners of the previous men's FIFA World Cups. Brazil has won the most titles, and Italy and Brazil are the only countries to win back ...",
-                    "sitelinks": [
-                        {
-                            "title": "North America 2026 FIFA...",
-                            "link": "https://www.topendsports.com/events/worldcupsoccer/hosts/2026/index.htm"
-                        },
-                        {
-                            "title": "Brazil",
-                            "link": "https://www.topendsports.com/events/worldcupsoccer/countries/brazil.htm"
-                        },
-                        {
-                            "title": "Germany",
-                            "link": "https://www.topendsports.com/events/worldcupsoccer/countries/germany.htm"
-                        },
-                        {
-                            "title": "Uruguay",
-                            "link": "https://www.topendsports.com/events/worldcupsoccer/countries/uruguay.htm"
-                        }
-                    ],
-                    "position": 8
-                },
-                {
-                    "title": "Mbappe v Messi: The FIFA World Cup 2022 Final - YouTube",
-                    "link": "https://www.youtube.com/watch?v=z_AZwdFg6uA",
-                    "snippet": "Mbappe v Messi: The FIFA World Cup 2022 Final. 2.9M views · 1 ... Comments1.3K. Test Test. The day that football won. Forever. 7:39 · Go to ...",
-                    "date": "Mar 16, 2024",
-                    "position": 9
-                }
-            ],
-            "peopleAlsoAsk": [
-                {
-                    "question": "Who won the last World Cup in 2022?",
-                    "snippet": "Argentina national football team\n2022 World Cup / Champion"
-                },
-                {
-                    "question": "What men's team won the last World Cup?",
-                    "snippet": "Men's World Cup titles won from 1930 to 2022, by country\nyear\nresult\n\n2010\nSpain*\n0\n2014\nGermany*\n0\n2018\nFrance\n2\n2022\nArgentina**\n3",
-                    "title": "World Cup | History & Winners - Britannica",
-                    "link": "https://www.britannica.com/sports/World-Cup-football"
-                }
-            ],
-            "relatedSearches": [
-                {
-                    "query": "2022 World Cup"
-                },
-                {
-                    "query": "2022 FIFA World Cup final"
-                },
-                {
-                    "query": "World Cup 2022 winner"
-                },
-                {
-                    "query": "2022 World Cup"
-                },
-                {
-                    "query": "When did Argentina win the World Cup 2022"
-                },
-                {
-                    "query": "World Cup Final 2022 Full Match"
-                },
-                {
-                    "query": "World Cup final viewers worldwide 2022"
-                },
-                {
-                    "query": "Who won the World Cup 2023"
-                },
-                {
-                    "query": "FIFA World Cup 2022 Qualifiers"
-                }
-            ],
-            "credits": 1
-        }
-    }
-      console.log('Web search response:', {
-        status: searchData.status,
-        statusText: searchData.statusText,
-        data: searchData.data
-      });
-      
+      console.log("Search results received:", searchData);
+
       // Format search results for the user
-      const formattedResults = formatSearchResults(searchData.data);
+      const formattedResults = formatSearchResults(searchData);
       
-      // Append the search results to the chat
-      append({
-        id,
-        content: formattedResults,
-        role: 'user'
-      });
-      
-      // Now use your existing chat API endpoint
       toast.loading('Processing with Claude...', { id: toastId });
       
-      // Generate a UUID for the message
-      const messageId = nanoid();
+      // Create formatted content with search results and instructions for Claude
+      const formattedContent = `<search_results>
+${formattedResults}
+</search_results>
+
+YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
+1. You have been given search results between <search_results> tags above.
+2. The user's question is: "${input}"
+3. Answer ONLY using information from these search results.
+4. DO NOT claim you don't have access to real-time or current information.
+5. If the search results contain the answer, provide it clearly.
+
+User question: ${input}`;
+
+      // Create a message ID for the search content
+      const messageId = uuidv4();
+      const assistantId = uuidv4();
+      console.log("BEFORE SENDIG TO SERVER");
       
-      // Create a request body for your API endpoint
-      const requestBody = {
-        id: chatId,
-        selectedChatModel: 'claude-3-sonnet',  
-        selectedVisibilityType: 'public',
-        message: {
-          id: messageId,
-          role: 'user',
-          content: `Web search results for "${input}":\n\n${formattedResults}\n\nBased on these search results, please provide a concise answer to: ${input}`,
-          parts: [{ 
-            type: 'text', 
-            text: `Web search results for "${input}":\n\n${formattedResults}\n\nBased on these search results, please provide a concise answer to: ${input}` 
-          }],
-          createdAt: new Date().toISOString(),
-        }
-      };
-      
-      // Send the search results to your existing chat API
-      const llmResponse = await fetch('/api/chat', {
+      // Make direct API call and handle streaming properly
+      const aiResponse = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          id: chatId,
+          selectedChatModel: 'claude-3-sonnet',
+          selectedVisibilityType: 'private',
+          message: {
+            id: messageId,
+            role: 'user',
+            content: formattedContent,
+            createdAt: new Date().toISOString(),
+            parts: [{ type: 'text', text: formattedContent }],
+          },
+        }),
       });
       
-      if (!llmResponse.ok) {
-        const errorText = await llmResponse.text();
-        throw new Error(`Failed to get LLM response: ${errorText}`);
+      if (!aiResponse.ok) {
+        throw new Error(`AI response failed: ${aiResponse.statusText}`);
+      }
+    
+      // Process the streaming response
+      const reader = aiResponse.body?.getReader();
+      let assistantContent = "";
+      let accumulatedChunks = "";
+      console.log("reader is ", reader);
+
+      if (reader) {
+        // Add placeholder for assistant message that will be updated
+        setMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: assistantId,
+            content: "Analyzing search results...",
+            role: 'assistant',
+            createdAt: new Date(),
+          }
+        ]);
+        
+        // Reading loop for the stream
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              console.log("Stream completed");
+              break;
+            }
+            
+            // Convert the bytes to text
+            const chunk = new TextDecoder().decode(value);
+            console.log("Received chunk:", chunk);
+            
+            // Accumulate chunks to handle split content
+            accumulatedChunks += chunk;
+            
+            // Try different patterns to extract content
+            let extracted = false;
+            
+            // Try pattern 1: "content":"text"
+            const contentMatches = accumulatedChunks.match(/"content":"([^"]*)"/g);
+            if (contentMatches && contentMatches.length > 0) {
+              // Extract the latest content
+              const latestMatch = contentMatches[contentMatches.length - 1];
+              const content = latestMatch.replace(/"content":"/, '').replace(/"$/, '');
+              assistantContent = content.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+              extracted = true;
+              console.log("Extracted content (pattern 1):", assistantContent);
+            }
+            
+            // Try pattern 2: content field in JSON object
+            if (!extracted) {
+              try {
+                // Try to find complete JSON objects in the stream
+                const jsonMatches = accumulatedChunks.match(/\{[^\{]*\}/g);
+                if (jsonMatches) {
+                  for (const jsonStr of jsonMatches) {
+                    try {
+                      const json = JSON.parse(jsonStr);
+                      if (json.content) {
+                        assistantContent = json.content;
+                        extracted = true;
+                        console.log("Extracted content (pattern 2):", assistantContent);
+                        break;
+                      }
+                    } catch (e) {
+                      // Not valid JSON, continue
+                    }
+                  }
+                }
+              } catch (e) {
+                console.log("Error parsing JSON:", e);
+              }
+            }
+            
+            // Try pattern 3: Look for text between quotes
+            if (!extracted && accumulatedChunks.includes('"text":"')) {
+              const textMatches = accumulatedChunks.match(/"text":"([^"]*)"/g);
+              if (textMatches && textMatches.length > 0) {
+                // Extract the latest text
+                const latestMatch = textMatches[textMatches.length - 1];
+                const text = latestMatch.replace(/"text":"/, '').replace(/"$/, '');
+                assistantContent = text.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                extracted = true;
+                console.log("Extracted content (pattern 3):", assistantContent);
+              }
+            }
+            
+            // Fallback: just take any text between quotes if we're desperate
+            if (!extracted && assistantContent === "" && accumulatedChunks.length > 100) {
+              const allStrings = accumulatedChunks.match(/"([^"]{10,})"/g);
+              if (allStrings && allStrings.length > 0) {
+                // Take the longest string
+                const longest = allStrings.reduce((a, b) => a.length > b.length ? a : b);
+                assistantContent = longest.replace(/^"/, '').replace(/"$/, '').replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                console.log("Extracted content (fallback):", assistantContent);
+              }
+            }
+            
+            // Update the assistant message with new content if we have any
+            if (assistantContent) {
+              setMessages((currentMessages) => 
+                currentMessages.map(msg => 
+                  msg.id === assistantId 
+                    ? { ...msg, content: assistantContent } 
+                    : msg
+                )
+              );
+            }
+          }
+        } catch (streamError) {
+          console.error("Error processing stream:", streamError);
+        }
       }
       
+      // Ensure we have a final message even if streaming failed
+      if (!assistantContent) {
+        console.log("No content extracted from stream, using fallback message");
+        setMessages((currentMessages) => 
+          currentMessages.map(msg => 
+            msg.id === assistantId 
+              ? { ...msg, content: "Based on the search results, I found information related to your query but couldn't format it properly. Please try again." } 
+              : msg
+          )
+        );
+      } else {
+        console.log("Final extracted content:", assistantContent);
+      }
+
       toast.success('Web search completed', { id: toastId });
     } catch (error) {
       console.error('Web search error:', error);
       toast.error(error instanceof Error ? error.message : 'An unknown error occurred', { id: toastId });
+    } finally {
+      setWebSearchActive(false);
     }
-  }, [append, chatId]);
+  }, [setMessages, chatId]);
 
   // Helper function to format search results
   const formatSearchResults = (searchData: any): string => {
-    if (!searchData || !searchData.results || !Array.isArray(searchData.results)) {
+    if (!searchData) {
       return 'No search results found.';
     }
     
-    const results = searchData.results.slice(0, 3); // Take top 3 results
+    const { organic, peopleAlsoAsk, images } = searchData;
+    let formattedResults = '';
     
-    return `
-Here are the search results for your query:
-
-${results.map((result: any, index: number) => `
-[Result ${index + 1}]
-Title: ${result.title || 'No title'}
-Snippet: ${result.snippet || 'No description'}
-URL: ${result.link || 'No link'}
-`).join('\n')}
-    `;
+    // Add the organic results (text search results)
+    if (organic && Array.isArray(organic)) {
+      formattedResults += `TOP SEARCH RESULTS:\n\n`;
+      const topResults = organic.slice(0, 3); // Take top 3 results
+      
+      topResults.forEach((result, index) => {
+        formattedResults += `[${index + 1}] ${result.title}\n${result.snippet}\n\n`;
+      });
+    }
+    
+    // Add frequently asked questions if available
+    if (peopleAlsoAsk && Array.isArray(peopleAlsoAsk) && peopleAlsoAsk.length > 0) {
+      formattedResults += `FREQUENTLY ASKED QUESTIONS:\n\n`;
+      peopleAlsoAsk.slice(0, 2).forEach((item, index) => {
+        formattedResults += `Q: ${item.question}\nA: ${item.snippet}\n\n`;
+      });
+    }
+    
+    // Ensure the content doesn't exceed validation limits
+    return formattedResults.slice(0, 8000);
   };
 
   useEffect(() => {
@@ -420,38 +370,26 @@ URL: ${result.link || 'No link'}
     window.history.replaceState({}, '', `/chat/${chatId}`);
     
     if (webSearchActive) {
-      // First API call: Append user message to chat
-      console.log("1. Appending user message to chat");
-      append({
-        content: input,
-        role: 'user',
-      });
+      console.log("Web search active - handling web search for query:", input);
       
-      console.log("2. handleWebSearch called - will process the search");
-      // Perform web search with the input
-      handleWebSearch(input)
-        .then(() => {
-          console.log("Web search completed successfully");
-        })
+      // Store the user's question for web search
+      const userQuestion = input;
+      
+      // Clear input field immediately
+      setInput('');
+      
+      // Perform web search (will handle showing the user message)
+      handleWebSearch(userQuestion)
         .catch(error => {
           console.error("Web search failed:", error);
-          // Show error toast if not already shown
-          toast.error('Web search failed. You can try again.', { id: 'web-search-toast' });
+          toast.error('Web search failed. Please try again.', { id: 'web-search-toast' });
         });
-      
-      // Clear input field immediately so user can type a new message
-      setInput('');
     } else {
-      console.log("handleSubmit called - regular chat message");
-      // Normal submission - single API call
-      try {
-        handleSubmit(undefined, {
-          experimental_attachments: attachments,
-        });
-      } catch (error) {
-        console.error("Message submission failed:", error);
-        toast.error('Failed to send message. Please try again.');
-      }
+      console.log("Regular chat message - normal submission");
+      // Normal submission
+      handleSubmit(undefined, {
+        experimental_attachments: attachments,
+      });
     }
 
     setAttachments([]);
@@ -469,7 +407,6 @@ URL: ${result.link || 'No link'}
     width,
     chatId,
     webSearchActive,
-    append,
     input,
     handleWebSearch,
     setInput,
@@ -634,7 +571,7 @@ URL: ${result.link || 'No link'}
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
         <WebSearchButton 
           input={input} 
-          handleWebSearch={() => setWebSearchActive(!webSearchActive)} 
+          toggleWebSearch={() => setWebSearchActive(!webSearchActive)} 
           status={status}
           isActive={webSearchActive}
         />
@@ -748,12 +685,12 @@ const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
 
 function PureWebSearchButton({
   input,
-  handleWebSearch,
+  toggleWebSearch,
   status,
   isActive,
 }: {
   input: string;
-  handleWebSearch: () => void;
+  toggleWebSearch: () => void;
   status: UseChatHelpers['status'];
   isActive: boolean;
 }) {
@@ -766,7 +703,7 @@ function PureWebSearchButton({
       )}
       onClick={(event) => {
         event.preventDefault();
-        handleWebSearch();
+        toggleWebSearch();
       }}
       disabled={status !== 'ready'}
       variant="outline"

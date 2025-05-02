@@ -34,7 +34,6 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
-    console.log("JSON: ", json);
     requestBody = postRequestBodySchema.parse(json);
   } catch (_) {
     return new Response('Invalid request body', { status: 400 });
@@ -42,9 +41,6 @@ export async function POST(request: Request) {
 
   try {
     const { id, message, selectedChatModel } = requestBody;
-    console.log("Request Body: ", requestBody);
-    
-    console.log("Details ", id, message, selectedChatModel);
     const session = await auth();
     if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
@@ -100,7 +96,6 @@ export async function POST(request: Request) {
       messages: previousMessages,
       message,
     });
-    console.log("Messages for model: ", messagesForModel);
 
     const { longitude, latitude, city, country } = geolocation(request);
 
@@ -127,23 +122,27 @@ export async function POST(request: Request) {
     return createDataStreamResponse({
       execute: (dataStream) => {
         try {
-          console.log("Starting streamText execution with model:", selectedChatModel);
-          console.log("Message parts sample:", message.parts?.[0]?.text?.substring(0, 100));
           
           const result = streamText({
             model: myProvider.languageModel(selectedChatModel),
-            system: systemPrompt({ selectedChatModel, requestHints }),
+            system: systemPrompt({ 
+              selectedChatModel, 
+              requestHints,
+              messages: messagesForModel 
+            }),
             messages: messagesForModel,
             maxSteps: 5,
             experimental_activeTools:
-              selectedChatModel === 'chat-model-reasoning'
+              selectedChatModel === 'chat-model-reasoning' || 
+              message.content.toLowerCase().includes('web search results') ||
+              message.content.includes('<search_results>')
                 ? []
                 : [
                     // Disable all automatic tools for web search responses
-                    // 'getWeather',
-                    // 'createDocument',
-                    // 'updateDocument',
-                    // 'requestSuggestions',
+                    'getWeather',
+                    'createDocument',
+                    'updateDocument',
+                    'requestSuggestions',
                   ],
             experimental_transform: smoothStream({ chunking: 'word' }),
             experimental_generateMessageId: generateUUID,
@@ -159,7 +158,7 @@ export async function POST(request: Request) {
             onFinish: async ({ response }) => {
               if (session.user?.id) {
                 try {
-                  console.log("onFinish Response: ", response.messages);
+                  //console.log("onFinish Response: ", response.messages);
                   const assistantId = getTrailingMessageId({
                     messages: response.messages.filter(
                       (message) => message.role === 'assistant',
