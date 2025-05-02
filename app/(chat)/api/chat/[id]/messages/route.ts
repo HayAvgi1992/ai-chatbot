@@ -24,15 +24,16 @@ const saveMessageSchema = z.object({
 
 export async function GET(
   request: Request, 
-  { params }: { params: { id: string } }
-) {
+  context: { params: { id: string } }
+): Promise<Response> {
   try {
+    const { id } = context.params;
+    
     const session = await auth();
     if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const { id } = params;
     if (!id) {
       return new Response('Chat ID is required', { status: 400 });
     }
@@ -61,10 +62,10 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
-) {
+  context: { params: { id: string } }
+): Promise<Response> {
   try {
-    const chatId = params.id;
+    const chatId = context.params.id;
     
     const session = await auth();
     if (!session?.user) {
