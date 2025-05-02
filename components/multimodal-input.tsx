@@ -193,6 +193,9 @@ function PureMultimodalInput({
 
   const handleWebSearch = useCallback(async () => {
     if (input.trim()) {
+      // Show loading toast
+      toast.loading('Searching the web...', { id: 'web-search-toast' });
+      
       try {
         // Use a consistent timestamp format
         const timestamp = new Date().toISOString();
@@ -241,13 +244,8 @@ Based on these sources, answer the user's question in a clear, concise, and accu
 
         console.log('Prompt:', prompt);
 
-        // Create a message object with generated ID
-        const userMessage = {
-          id: generateUUID(),
-          role: 'user',
-          content: prompt,
-          createdAt: new Date(),
-        };
+        // Generate a UUID for the message
+        const messageId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 
         // Send the prompt to the LLM and get its response
         const llmResponse = await fetch('/api/chat', {
@@ -256,10 +254,16 @@ Based on these sources, answer the user's question in a clear, concise, and accu
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            messages: [userMessage],
-            stream: false,
             id: chatId,
-            selectedChatModel: 'together-ai',
+            selectedChatModel: 'chat-model',
+            selectedVisibilityType: 'public',
+            message: {
+              id: messageId,
+              role: 'user',
+              content: prompt,
+              parts: [{ type: 'text', text: prompt }],
+              createdAt: new Date(),
+            }
           }),
         });
 
@@ -273,19 +277,9 @@ Based on these sources, answer the user's question in a clear, concise, and accu
         const responseText = await llmResponse.text();
         console.log('LLM Response:', responseText);
 
-        // Try to parse as JSON, if that fails use the text directly
-        let finalContent;
-        try {
-          const parsedResponse = JSON.parse(responseText);
-          finalContent = parsedResponse.content || responseText;
-        } catch (e) {
-          finalContent = responseText;
-        }
-
-        // Ensure we have a valid string to append
-        if (typeof finalContent !== 'string') {
-          finalContent = JSON.stringify(finalContent);
-        }
+        // Parse the streaming response
+        const finalContent = parseModelResponse(responseText);
+        console.log('Parsed Content:', finalContent);
 
         // Use requestAnimationFrame to ensure we're in the browser context
         if (typeof window !== 'undefined') {
@@ -542,10 +536,107 @@ function PureWebSearchButton({
 
 const WebSearchButton = memo(PureWebSearchButton);
 
-// Add a function to generate UUID
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+/**
+ * Parses the streaming response from the model
+ * @param responseText The raw response text from the model
+ * @returns The cleaned and parsed content
+ */
+function parseModelResponse(responseText: string): string {
+  let finalContent = '';
+  
+  try {
+    // Try parsing as JSON
+    const jsonContent = tryParseJSON(responseText);
+    if (jsonContent) {
+      return jsonContent;
+    }
+    
+    // Try extracting from streaming format
+    const streamContent = extractStreamContent(responseText);
+    if (streamContent) {
+      return streamContent;
+    }
+    
+    // Try fallback extraction
+    const fallbackContent = extractFallbackContent(responseText);
+    if (fallbackContent) {
+      return fallbackContent;
+    }
+    
+    // Last resort: use raw text
+    return responseText;
+  } catch (error) {
+    console.error('Error parsing response:', error);
+    return 'Error parsing model response. Please try again.';
+  }
+}
+
+/**
+ * Tries to parse the response as JSON
+ * @param text The response text
+ * @returns The content if successful, empty string otherwise
+ */
+function tryParseJSON(text: string): string {
+  try {
+    const parsedJSON = JSON.parse(text);
+    if (parsedJSON.content) {
+      return cleanText(parsedJSON.content);
+    }
+    return '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Extracts content from streaming format
+ * @param text The response text
+ * @returns The extracted content if successful, empty string otherwise
+ */
+function extractStreamContent(text: string): string {
+  const streamPattern = /(\d+):"([^"]*)"/g;
+  const contentChunks: string[] = [];
+  let match;
+  
+  while ((match = streamPattern.exec(text)) !== null) {
+    contentChunks.push(match[2]);
+  }
+  
+  if (contentChunks.length > 0) {
+    return cleanText(contentChunks.join(''));
+  }
+  
+  return '';
+}
+
+/**
+ * Fallback extraction for any text in quotes
+ * @param text The response text
+ * @returns The extracted content if successful, empty string otherwise
+ */
+function extractFallbackContent(text: string): string {
+  const fallbackPattern = /"([^"]+)"/g;
+  const textChunks: string[] = [];
+  let match;
+  
+  while ((match = fallbackPattern.exec(text)) !== null) {
+    if (match[1].length > 3) {
+      textChunks.push(match[1]);
+    }
+  }
+  
+  if (textChunks.length > 0) {
+    return cleanText(textChunks.join(' '));
+  }
+  
+  return '';
+}
+
+/**
+ * Cleans the text by removing escaped characters and trimming
+ * @param text The text to clean
+ * @returns The cleaned text
+ */
+function cleanText(text: string): string {
+  return text.replace(/^\\"|\\n|\\r|\\t|\\"/g, '').trim();
 }

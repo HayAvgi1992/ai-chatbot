@@ -34,23 +34,17 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
-    console.log("Request ", json);
-
     requestBody = postRequestBodySchema.parse(json);
-    console.log("Request body ", requestBody);
   } catch (_) {
     return new Response('Invalid request body', { status: 400 });
   }
 
   try {
-    const { id, messages, selectedChatModel } = requestBody;
+    const { id, message, selectedChatModel } = requestBody;
     
-    // Get the last message from the messages array
-    const message = messages[messages.length - 1];
     
     console.log("Details ", id, message, selectedChatModel);
     const session = await auth();
-    console.log("Session ", session);
     if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
     }
