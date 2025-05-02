@@ -20,15 +20,9 @@ const messageSchema = z.object({
   createdAt: z.coerce.date().optional(),
 });
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
 export async function GET(
   request: NextRequest,
-  { params }: RouteParams
+  { params }: { params: { id: string } }
 ) {
   try {
     const { id } = params;
@@ -67,7 +61,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: RouteParams
+  { params }: { params: { id: string } }
 ) {
   try {
     const { id: chatId } = params;
