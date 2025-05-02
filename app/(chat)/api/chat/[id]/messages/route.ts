@@ -1,10 +1,9 @@
 import { auth } from '@/app/(auth)/auth';
-import { getChatById, getMessagesByChatId, saveMessages ,
-    saveChat,
-  } from '@/lib/db/queries';
+import { getChatById, getMessagesByChatId, saveMessages, saveChat } from '@/lib/db/queries';
 import { z } from 'zod';
 import { generateTitleFromUserMessage } from '../../../../actions';
-  
+import { NextRequest, NextResponse } from 'next/server';
+
 // Schema for POST request validation
 const saveMessageSchema = z.object({
   id: z.string().uuid(),
@@ -22,58 +21,65 @@ const saveMessageSchema = z.object({
   createdAt: z.coerce.date().optional(),
 });
 
+interface RouteParams {
+  params: {
+    id: string;
+  };
+}
+
 export async function GET(
-  request: Request, 
-  context: { params: { id: string } }
-): Promise<Response> {
+  request: NextRequest,
+  { params }: RouteParams
+) {
   try {
-    const { id } = context.params;
+    const { id } = params;
     
     const session = await auth();
     if (!session?.user) {
-      return new Response('Unauthorized', { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     if (!id) {
-      return new Response('Chat ID is required', { status: 400 });
+      return NextResponse.json({ error: 'Chat ID is required' }, { status: 400 });
     }
 
     // Check if the chat exists and belongs to the user
     const chat = await getChatById({ id });
     if (!chat) {
-      return new Response('Chat not found', { status: 404 });
+      return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
     }
 
     if (chat.userId !== session.user.id) {
-      return new Response('Forbidden', { status: 403 });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get the messages for the chat
     const messages = await getMessagesByChatId({ id });
 
-    return Response.json(messages);
+    return NextResponse.json(messages);
   } catch (error) {
     console.error('Error fetching chat messages:', error);
-    return new Response(`An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`, {
-      status: 500,
-    });
+    return NextResponse.json(
+      { error: `An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}` }, 
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(
-  request: Request,
-  context: { params: { id: string } }
-): Promise<Response> {
+  request: NextRequest,
+  { params }: RouteParams
+) {
   try {
-    const chatId = context.params.id;
+    const { id: chatId } = params;
     
     const session = await auth();
     if (!session?.user) {
-      return new Response('Unauthorized', { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     if (!chatId) {
-      return new Response('Chat ID is required', { status: 400 });
+      return NextResponse.json({ error: 'Chat ID is required' }, { status: 400 });
     }
 
     // Parse the request body
@@ -84,7 +90,7 @@ export async function POST(
       messageData = saveMessageSchema.parse(body);
     } catch (error) {
       console.error("Invalid message data:", error);
-      return new Response('Invalid message data', { status: 400 });
+      return NextResponse.json({ error: 'Invalid message data' }, { status: 400 });
     }
 
     // Check if the chat exists and belongs to the user
@@ -119,7 +125,7 @@ export async function POST(
         // Continue processing - the message might still be saved
       }
     } else if (chat.userId !== session.user.id) {
-      return new Response('Forbidden', { status: 403 });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Save the message to the database
@@ -138,11 +144,12 @@ export async function POST(
 
     // Return updated messages
     const updatedMessages = await getMessagesByChatId({ id: chatId });
-    return Response.json(updatedMessages);
+    return NextResponse.json(updatedMessages);
   } catch (error) {
     console.error('Error saving chat message:', error);
-    return new Response(`An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`, {
-      status: 500,
-    });
+    return NextResponse.json(
+      { error: `An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}` }, 
+      { status: 500 }
+    );
   }
 } 
