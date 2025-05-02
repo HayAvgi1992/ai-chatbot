@@ -23,10 +23,10 @@ const messageSchema = z.object({
 
 export async function GET(
   request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = request.nextUrl;
-    const id = searchParams.get('id');
+    const { id } = params;
     
     const session = await auth();
     if (!session?.user) {
@@ -62,10 +62,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = request.nextUrl;
-    const chatId = searchParams.get('id');
+    const { id: chatId } = params;
     
     console.log("POST request received for chat ID:", chatId);
     

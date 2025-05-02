@@ -23,11 +23,11 @@ const saveMessageSchema = z.object({
 
 export async function GET(
   request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = request.nextUrl;
-    const id = searchParams.get('id');
-
+    const { id } = params;
+    
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -62,10 +62,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = request.nextUrl;
-    const chatId = searchParams.get('id');
+    const { id: chatId } = params;
     
     const session = await auth();
     if (!session?.user) {
