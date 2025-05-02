@@ -108,8 +108,11 @@ function PureMultimodalInput({
     toast.loading('Searching the web...', { id: toastId });
     
     try {
-      // Add user message to UI without triggering AI response
+      // Generate IDs for our messages
       const userMessageId = uuidv4();
+      const assistantId = uuidv4();
+      
+      // First add the user's original query to the UI (the real message we want to show)
       setMessages((currentMessages) => [
         ...currentMessages,
         {
@@ -142,9 +145,21 @@ function PureMultimodalInput({
       // Format search results for the user
       const formattedResults = formatSearchResults(searchData);
       
+      // Add assistant placeholder message right away
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: assistantId,
+          content: "Analyzing search results...",
+          role: 'assistant',
+          createdAt: new Date(),
+        }
+      ]);
+      
       toast.loading('Processing with Claude...', { id: toastId });
       
       // Create formatted content with search results and instructions for Claude
+      // THIS SHOULD NOT BE DISPLAYED TO THE USER
       const formattedContent = `<search_results>
 ${formattedResults}
 </search_results>
@@ -158,10 +173,7 @@ YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
 
 User question: ${input}`;
 
-      // Create a message ID for the search content
-      const messageId = uuidv4();
-      const assistantId = uuidv4();
-      console.log("BEFORE SENDIG TO SERVER");
+      console.log("BEFORE SENDING TO SERVER");
       
       // Make direct API call and handle streaming properly
       const aiResponse = await fetch('/api/chat', {
@@ -174,11 +186,11 @@ User question: ${input}`;
           selectedChatModel: 'claude-3-sonnet',
           selectedVisibilityType: 'private',
           message: {
-            id: messageId,
+            id: uuidv4(), // Use a different ID for this "hidden" request
             role: 'user',
             content: formattedContent,
-            createdAt: new Date().toISOString(),
             parts: [{ type: 'text', text: formattedContent }],
+            createdAt: new Date().toISOString(),
           },
         }),
       });
@@ -186,134 +198,56 @@ User question: ${input}`;
       if (!aiResponse.ok) {
         throw new Error(`AI response failed: ${aiResponse.statusText}`);
       }
-    
-      // Process the streaming response
-      const reader = aiResponse.body?.getReader();
-      let assistantContent = "";
-      let accumulatedChunks = "";
-      console.log("reader is ", reader);
-
-      if (reader) {
-        // Add placeholder for assistant message that will be updated
-        setMessages((currentMessages) => [
-          ...currentMessages,
-          {
-            id: assistantId,
-            content: "Analyzing search results...",
-            role: 'assistant',
-            createdAt: new Date(),
-          }
-        ]);
-        
-        // Reading loop for the stream
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              console.log("Stream completed");
-              break;
-            }
-            
-            // Convert the bytes to text
-            const chunk = new TextDecoder().decode(value);
-            console.log("Received chunk:", chunk);
-            
-            // Accumulate chunks to handle split content
-            accumulatedChunks += chunk;
-            
-            // Try different patterns to extract content
-            let extracted = false;
-            
-            // Try pattern 1: "content":"text"
-            const contentMatches = accumulatedChunks.match(/"content":"([^"]*)"/g);
-            if (contentMatches && contentMatches.length > 0) {
-              // Extract the latest content
-              const latestMatch = contentMatches[contentMatches.length - 1];
-              const content = latestMatch.replace(/"content":"/, '').replace(/"$/, '');
-              assistantContent = content.replace(/\\n/g, '\n').replace(/\\"/g, '"');
-              extracted = true;
-              console.log("Extracted content (pattern 1):", assistantContent);
-            }
-            
-            // Try pattern 2: content field in JSON object
-            if (!extracted) {
-              try {
-                // Try to find complete JSON objects in the stream
-                const jsonMatches = accumulatedChunks.match(/\{[^\{]*\}/g);
-                if (jsonMatches) {
-                  for (const jsonStr of jsonMatches) {
-                    try {
-                      const json = JSON.parse(jsonStr);
-                      if (json.content) {
-                        assistantContent = json.content;
-                        extracted = true;
-                        console.log("Extracted content (pattern 2):", assistantContent);
-                        break;
-                      }
-                    } catch (e) {
-                      // Not valid JSON, continue
-                    }
-                  }
-                }
-              } catch (e) {
-                console.log("Error parsing JSON:", e);
-              }
-            }
-            
-            // Try pattern 3: Look for text between quotes
-            if (!extracted && accumulatedChunks.includes('"text":"')) {
-              const textMatches = accumulatedChunks.match(/"text":"([^"]*)"/g);
-              if (textMatches && textMatches.length > 0) {
-                // Extract the latest text
-                const latestMatch = textMatches[textMatches.length - 1];
-                const text = latestMatch.replace(/"text":"/, '').replace(/"$/, '');
-                assistantContent = text.replace(/\\n/g, '\n').replace(/\\"/g, '"');
-                extracted = true;
-                console.log("Extracted content (pattern 3):", assistantContent);
-              }
-            }
-            
-            // Fallback: just take any text between quotes if we're desperate
-            if (!extracted && assistantContent === "" && accumulatedChunks.length > 100) {
-              const allStrings = accumulatedChunks.match(/"([^"]{10,})"/g);
-              if (allStrings && allStrings.length > 0) {
-                // Take the longest string
-                const longest = allStrings.reduce((a, b) => a.length > b.length ? a : b);
-                assistantContent = longest.replace(/^"/, '').replace(/"$/, '').replace(/\\n/g, '\n').replace(/\\"/g, '"');
-                console.log("Extracted content (fallback):", assistantContent);
-              }
-            }
-            
-            // Update the assistant message with new content if we have any
-            if (assistantContent) {
-              setMessages((currentMessages) => 
-                currentMessages.map(msg => 
-                  msg.id === assistantId 
-                    ? { ...msg, content: assistantContent } 
-                    : msg
-                )
-              );
-            }
-          }
-        } catch (streamError) {
-          console.error("Error processing stream:", streamError);
-        }
-      }
       
-      // Ensure we have a final message even if streaming failed
-      if (!assistantContent) {
-        console.log("No content extracted from stream, using fallback message");
+      // Method 1: Using response.text() instead of streaming
+      try {
+        // Get the full response as text
+        const responseText = await aiResponse.text();
+        console.log("Full response text:", responseText);
+        
+        // Extract all the text chunks from the format 0:"text"
+        let extractedContent = "";
+        const contentMatches = responseText.matchAll(/0:"([^"]+)"/g);
+        
+        // Combine all matches into one response
+        for (const match of contentMatches) {
+          if (match[1]) {
+            extractedContent += match[1];
+          }
+        }
+        
+        console.log("Extracted content:", extractedContent);
+        
+        // If we got content, update the assistant message
+        if (extractedContent) {
+          setMessages((currentMessages) => 
+            currentMessages.map(msg => 
+              msg.id === assistantId 
+                ? { ...msg, content: extractedContent } 
+                : msg
+            )
+          );
+        } else {
+          // Fallback if we couldn't extract content
+          setMessages((currentMessages) => 
+            currentMessages.map(msg => 
+              msg.id === assistantId 
+                ? { ...msg, content: "Based on the search results, I found information but couldn't format it properly. Please try again." } 
+                : msg
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Error processing response:", error);
         setMessages((currentMessages) => 
           currentMessages.map(msg => 
             msg.id === assistantId 
-              ? { ...msg, content: "Based on the search results, I found information related to your query but couldn't format it properly. Please try again." } 
+              ? { ...msg, content: "Error processing the search results. Please try again." } 
               : msg
           )
         );
-      } else {
-        console.log("Final extracted content:", assistantContent);
       }
-
+      
       toast.success('Web search completed', { id: toastId });
     } catch (error) {
       console.error('Web search error:', error);
