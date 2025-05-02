@@ -21,11 +21,9 @@ const messageSchema = z.object({
 
 export async function GET(
   request: Request, 
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
-    // Properly await the params before accessing
-    const params = await context.params;
     const id = params.id;
     
     const session = await auth();
@@ -61,11 +59,9 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
-    // Properly await the params before accessing
-    const params = await context.params;
     const chatId = params.id;
     
     console.log("POST request received for chat ID:", chatId);

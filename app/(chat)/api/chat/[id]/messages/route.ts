@@ -61,11 +61,9 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
-    // Properly await the params before accessing
-    const params = await context.params;
     const chatId = params.id;
     
     const session = await auth();
