@@ -54,7 +54,7 @@ export function Chat({
     experimental_prepareRequestBody: (body) => ({
       id,
       message: body.messages.at(-1),
-      selectedChatModel,
+      selectedChatModel: 'claude-3-sonnet',
       selectedVisibilityType,
     }),
     onFinish: () => {

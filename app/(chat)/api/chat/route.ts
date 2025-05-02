@@ -41,11 +41,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    console.log("Request Body: ", requestBody);
     const { id, message, selectedChatModel } = requestBody;
+    console.log("Request Body: ", requestBody);
     
-    
-    //console.log("Details ", id, message, selectedChatModel);
+    console.log("Details ", id, message, selectedChatModel);
     const session = await auth();
     if (!session?.user) {
       return new Response('Unauthorized', { status: 401 });
@@ -70,11 +69,24 @@ export async function POST(request: Request) {
     const chat = await getChatById({ id });
 
     if (!chat) {
-      const title = await generateTitleFromUserMessage({
-        message,
-      });
+      try {
+        let title = "";
+        try {
+          title = await generateTitleFromUserMessage({
+            message,
+          });
+        } catch (titleError) {
+          console.error("Failed to generate title:", titleError);
+          title = "Web Search Results"; // Fallback title
+        }
 
-      await saveChat({ id, userId: session.user.id, title });
+        console.log("Attempting to save chat with ID:", id, "and title:", title);
+        await saveChat({ id, userId: session.user.id, title });
+        console.log("Chat saved successfully");
+      } catch (chatSaveError) {
+        console.error("Failed to save chat:", chatSaveError);
+        // Continue processing - the message might still be saved
+      }
     } else {
       if (chat.userId !== session.user.id) {
         return new Response('Forbidden', { status: 403 });
@@ -88,6 +100,7 @@ export async function POST(request: Request) {
       messages: previousMessages,
       message,
     });
+    console.log("Messages for model: ", messagesForModel);
 
     const { longitude, latitude, city, country } = geolocation(request);
 
@@ -113,81 +126,95 @@ export async function POST(request: Request) {
 
     return createDataStreamResponse({
       execute: (dataStream) => {
-        const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
-          messages: messagesForModel,
-          maxSteps: 5,
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-            }),
-          },
-          onFinish: async ({ response }) => {
-            if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
-
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
-                }
-
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [message],
-                  responseMessages: response.messages,
-                });
-
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
+        try {
+          console.log("Starting streamText execution with model:", selectedChatModel);
+          console.log("Message parts sample:", message.parts?.[0]?.text?.substring(0, 100));
+          
+          const result = streamText({
+            model: myProvider.languageModel(selectedChatModel),
+            system: systemPrompt({ selectedChatModel, requestHints }),
+            messages: messagesForModel,
+            maxSteps: 5,
+            experimental_activeTools:
+              selectedChatModel === 'chat-model-reasoning'
+                ? []
+                : [
+                    // Disable all automatic tools for web search responses
+                    // 'getWeather',
+                    // 'createDocument',
+                    // 'updateDocument',
+                    // 'requestSuggestions',
                   ],
-                });
-              } catch (_) {
-                console.error('Failed to save chat');
+            experimental_transform: smoothStream({ chunking: 'word' }),
+            experimental_generateMessageId: generateUUID,
+            tools: {
+              getWeather,
+              createDocument: createDocument({ session, dataStream }),
+              updateDocument: updateDocument({ session, dataStream }),
+              requestSuggestions: requestSuggestions({
+                session,
+                dataStream,
+              }),
+            },
+            onFinish: async ({ response }) => {
+              if (session.user?.id) {
+                try {
+                  console.log("onFinish Response: ", response.messages);
+                  const assistantId = getTrailingMessageId({
+                    messages: response.messages.filter(
+                      (message) => message.role === 'assistant',
+                    ),
+                  });
+
+                  if (!assistantId) {
+                    throw new Error('No assistant message found!');
+                  }
+
+                  const [, assistantMessage] = appendResponseMessages({
+                    messages: [message],
+                    responseMessages: response.messages,
+                  });
+
+                  console.log("onFinish Assistant Message: ", assistantMessage.role);
+                  await saveMessages({
+                    messages: [
+                      {
+                        id: assistantId,
+                        chatId: id,
+                        role: assistantMessage.role,
+                        parts: assistantMessage.parts,
+                        attachments:
+                          assistantMessage.experimental_attachments ?? [],
+                        createdAt: new Date(),
+                      },
+                    ],
+                  });
+                } catch (error) {
+                  console.error('Failed to save chat message:', error);
+                }
               }
-            }
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
-        });
+            },
+            experimental_telemetry: {
+              isEnabled: isProductionEnvironment,
+              functionId: 'stream-text',
+            },
+          });
 
-        result.consumeStream();
+          console.log("streamText result created, consuming stream");
+          result.consumeStream();
 
-        result.mergeIntoDataStream(dataStream, {
-          sendReasoning: true,
-        });
+          console.log("Merging into data stream");
+          result.mergeIntoDataStream(dataStream, {
+            sendReasoning: true,
+          });
+        } catch (streamError) {
+          console.error("Error during streamText execution:", streamError);
+          throw streamError;
+        }
       },
-      onError: () => {
-        return 'Oops, an error occurred!';
+      onError: (error) => {
+        console.error("createDataStreamResponse error:", error);
+        return 'Oops, an error occurred! Please check the server logs for details.';
       },
     });
   } catch (error) {

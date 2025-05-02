@@ -57,7 +57,11 @@ function PureMultimodalInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
-  const [webSearchActive, setWebSearchActive] = useState(false);
+  const [webSearchActive, setWebSearchActive] = useState(true);
+
+  useEffect(() => {
+    console.log("webSearchActive changed to:", webSearchActive);
+  }, [webSearchActive]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -103,58 +107,103 @@ function PureMultimodalInput({
       toast.loading('Searching the web...', { id: 'web-search-toast' });
       
       try {
-        // Use a consistent timestamp format
-        const timestamp = new Date().toISOString();
-        
         /*
-        // Send the prompt to the webhook
-        const response = await fetch('https://hook.eu2.make.com/vb782vd49hrwzry8ia5rcse3ax3m8d2a', {
+        const response = await fetch('https://google.serper.dev/search', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'X-API-KEY': 'cc8a9b97abc4d9945867f9ddced1a42f0b26ce88',
           },
-          body: JSON.stringify({
-            prompt: input,
-            timestamp,
-          }),
+          body: JSON.stringify({ q: queryInput }),
         });
-
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const responseData = await response.json();
-        console.log('Make.com Webhook Response:', responseData);
+        console.log('Serper API Response:', responseData);
 
-        // Create the prompt using the webSearchPrompt function
-        const prompt = webSearchPrompt(responseData);
+        // Transform the Serper API response to the format expected by webSearchPrompt
+        const transformedData = {
+          original_prompt: queryInput,
+          search_results: {
+            organic: responseData.organic ? responseData.organic.map((result: {
+              title?: string;
+              snippet?: string;
+              link?: string;
+            }) => ({
+              title: result.title || '',
+              snippet: result.snippet || '',
+              link: result.link || ''
+            })) : []
+          }
+        };
         */
-        
-         const prompt = `User asked: "${queryInput}"
-
-I performed a Google search and found these results:
-
-1. What are the 5 most popular sports in the USA? - STATSCORE
-   What are the 5 most popular sports in the USA? · 1. American football (NFL) · 2. Baseball (MLB) · 3. Basketball (NBA) · 4. Ice hockey (NHL) · 5. Soccer (MLS).
-   (https://www.statscore.com/market-research/what-are-the-5-most-popular-sports-in-the-usa/)
-
-2. Sports in the United States - Wikipedia
-   Overview. The most popular team sports in the United States are American football, baseball, basketball, ice hockey, and soccer.
-   (https://en.wikipedia.org/wiki/Sports_in_the_United_States)
-
-3. Football Retains Dominant Position as Favorite U.S. Sport
-   Football remains Americans' favorite sport to watch, with baseball and basketball a distant second.
-   (https://news.gallup.com/poll/610046/football-retains-dominant-position-favorite-sport.aspx)
-
-Based on these sources, answer the user's question in a clear, concise, and accurate way.`;
+        const transformedData ={
+          "original_prompt": "Who won the men's last world cup in 2022 on soccer?",
+          "search_results": {
+              "organic": [
+                  {
+                      "title": "2022 FIFA World Cup - Wikipedia",
+                      "snippet": "Argentina were crowned the champions after winning the final against the ... Of the 32 nations qualified to play at the 2022 FIFA World Cup, 24 countries competed ...",
+                      "link": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup"
+                  },
+                  {
+                      "title": "The Moment When Argentina Won The 2022 FIFA World Cup",
+                      "snippet": "The Moment When Argentina Won The 2022 FIFA World Cup · Comments857.",
+                      "link": "https://www.youtube.com/watch?v=EROb-E23ZVs&pp=0gcJCdgAo7VqN5tD"
+                  },
+                  {
+                      "title": "How Argentina won the 2022 World Cup, in their own words - ESPN",
+                      "snippet": "On Dec. 18, 2022, Argentina won the men's World Cup in the most dramatic way possible, beating France in a penalty shootout after a breathless 3-3 draw.",
+                      "link": "https://www.espn.com/soccer/story/_/id/39121682/how-argentina-won-2022-world-cup-their-own-words"
+                  },
+                  {
+                      "title": "FIFA World Cup Qatar 2022™",
+                      "snippet": "The FIFA World Cup Qatar 2022™ was played from 20 November to 18 December 2022. 32 teams competed across 64 matches in the 22nd edition of the tournament.",
+                      "link": "https://www.fifa.com/en/tournaments/mens/worldcup/qatar2022"
+                  },
+                  {
+                      "title": "FIFA Men's World Cup Winners List | FOX Sports",
+                      "snippet": "See our comprehensive FIFA Men's World Cup history guide for everything you need about the tournament. FIFA Men's World Cup results and which countries have ...",
+                      "link": "https://www.foxsports.com/soccer/2022-fifa-world-cup/history"
+                  },
+                  {
+                      "title": "2022 FIFA World Cup | Qatar, Controversy, Stadiums, Winner, & Final",
+                      "snippet": "Argentina won its third World Cup victory in the tournament after defeating France in the final match.",
+                      "link": "https://www.britannica.com/sports/2022-FIFA-World-Cup"
+                  },
+                  {
+                      "title": "Argentina vs. France Highlights | 2022 FIFA World Cup Final",
+                      "snippet": "... 2022 FIFA World Cup Final https://youtu.be/Mxkg3qLIPC8 FOX Soccer https://www.youtube.com/user/Foxsoccer.",
+                      "link": "https://www.youtube.com/watch?v=Mxkg3qLIPC8"
+                  },
+                  {
+                      "title": "World Cup Football Winners List - Topend Sports",
+                      "snippet": "Here are the full list of winners of the previous men's FIFA World Cups. Brazil has won the most titles, and Italy and Brazil are the only countries to win back ...",
+                      "link": "https://www.topendsports.com/events/worldcupsoccer/winners.htm"
+                  },
+                  {
+                      "title": "Mbappe v Messi: The FIFA World Cup 2022 Final - YouTube",
+                      "snippet": "Mbappe v Messi: The FIFA World Cup 2022 Final. 2.9M views · 1 ... Comments1.3K. Test Test. The day that football won. Forever. 7:39 · Go to ...",
+                      "link": "https://www.youtube.com/watch?v=z_AZwdFg6uA"
+                  }
+              ]
+          }
+      }
+        // Create the prompt using the webSearchPrompt function
+        const prompt = webSearchPrompt(transformedData);
 
         console.log('Prompt:', prompt);
 
         // Generate a UUID for the message
         const messageId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+
+        // Use a direct approach with a single API call for the search
+        // No need to append the user message - this was already done in submitForm
         const requestBody = {
           id: chatId,
-          selectedChatModel: 'chat-model',
+          selectedChatModel: 'chat-model-reasoning',
           selectedVisibilityType: 'public',
           message: {
             id: messageId,
@@ -163,51 +212,123 @@ Based on these sources, answer the user's question in a clear, concise, and accu
             parts: [{ type: 'text', text: prompt }],
             createdAt: new Date().toISOString(),
           }
-        }
-        console.log("Request Body: ", requestBody);
+        };
+        
+        console.log("Request Body:", requestBody);
+        console.log("Making a SINGLE API call to /api/chat");
+        
         // Send the prompt to the LLM and get its response
-        const llmResponse = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!llmResponse.ok) {
-          const errorText = await llmResponse.text();
-          console.error('LLM Response Error:', errorText);
-          throw new Error(`Failed to get LLM response: ${errorText}`);
-        }
-
-        // Get the response text
-        const responseText = await llmResponse.text();
-        console.log('LLM Response:', responseText);
-
-        // Parse the streaming response
-        const finalContent = parseModelResponse(responseText);
-        console.log('Parsed Content:', finalContent);
-
-        // Use requestAnimationFrame to ensure we're in the browser context
-        if (typeof window !== 'undefined') {
-          requestAnimationFrame(async () => {
-            // Append the response to the chat
-            await append({
-              content: finalContent,
-              role: 'assistant',
-            });
+        console.log("Starting API request with timeout handling");
+        
+        // Set a longer timeout for the fetch request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        try {
+          const llmResponse = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
           });
-        }
+          
+          // Clear the timeout since the request completed
+          clearTimeout(timeoutId);
+          
+          console.log("LLM Response status:", llmResponse.status);
+          
+          if (!llmResponse.ok) {
+            const errorText = await llmResponse.text();
+            console.error('LLM Response Error:', errorText);
+            
+            // Update toast with specific error message
+            if (llmResponse.status === 400) {
+              toast.error('Invalid request format. Please try again.', { id: 'web-search-toast' });
+            } else {
+              toast.error(`Failed to get response (${llmResponse.status})`, { id: 'web-search-toast' });
+            }
+            
+            throw new Error(`Failed to get LLM response: ${errorText}`);
+          }
 
-        toast.success('Web search completed successfully!');
-        return { status: 'success' };
+          // Get the complete response text as a stream
+          const reader = llmResponse.body?.getReader();
+          if (!reader) {
+            throw new Error("Response body stream not available");
+          }
+          
+          let responseText = '';
+          let decoder = new TextDecoder();
+          
+          console.log("Starting to read response stream");
+          
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            responseText += chunk;
+            console.log("Received chunk:", chunk.length, "bytes");
+          }
+          
+          // Final decoding to handle any remaining bytes
+          const finalChunk = decoder.decode();
+          if (finalChunk) responseText += finalChunk;
+          
+          console.log("Complete response text length:", responseText.length);
+          console.log("Response text sample:", responseText.substring(0, 200) + "...");
+          
+          // Parse the streaming response
+          const finalContent = parseModelResponse(responseText);
+          console.log('Parsed Content:', finalContent);
+          
+          // Check if the response is an error message
+          if (finalContent.includes("Oops, an error occurred") || finalContent.length < 50) {
+            console.error("Error response detected:", finalContent);
+            toast.error('The AI model returned an error. Please try a different search.', { id: 'web-search-toast' });
+            
+            // Display the error to the user in the chat
+            if (typeof window !== 'undefined') {
+              requestAnimationFrame(async () => {
+                // Append a message explaining the error
+                await append({
+                  content: `Sorry, I encountered an error when processing your web search. Please try a different search query or try again later.`,
+                  role: 'assistant',
+                  parts: [{ type: 'text', text: `Sorry, I encountered an error when processing your web search. Please try a different search query or try again later.` }]
+                });
+              });
+            }
+            
+            return { status: 'error' };
+          }
+          
+          // The response is already being added to the chat by the API
+          
+          toast.success('Web search completed successfully!', { id: 'web-search-toast' });
+          return { status: 'success' };
+        } catch (error) {
+          // Clear the timeout if there was an error
+          clearTimeout(timeoutId);
+          
+          if (error instanceof Error && error.name === 'AbortError') {
+            console.error('Request timed out after 30 seconds');
+            toast.error('Request timed out. Please try again.', { id: 'web-search-toast' });
+          } else {
+            console.error('Error:', error);
+            toast.error('Failed to perform web search', { id: 'web-search-toast' });
+          }
+          
+          return { status: 'error' };
+        }
       } catch (error) {
-        console.error('Error:', error);
-        toast.error('Failed to perform web search');
-        throw error;
+        console.error('Error during webhook call:', error);
+        toast.error('Failed to perform web search', { id: 'web-search-toast' });
+        return { status: 'error' };
       }
     }
-  }, [input, append, chatId]);
+  }, [input, chatId, append]);
   
   useEffect(() => {
     setLocalStorageInput(input);
@@ -223,20 +344,42 @@ Based on these sources, answer the user's question in a clear, concise, and accu
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, '', `/chat/${chatId}`);
+    
     if (webSearchActive) {
+      // First API call: Append user message to chat
+      console.log("1. Appending user message to chat");
       append({
         content: input,
         role: 'user',
       });
-      console.log("handleWebSearch called");
-      handleWebSearch(input);
       
-      setWebSearchActive(false);
+      console.log("2. handleWebSearch called - will make a second API call");
+      // Second API call: perform web search with the input
+      handleWebSearch(input)
+        .then((result) => {
+          // Don't reset webSearchActive - keep the button active
+          // Let user manually toggle it off when they want to stop using web search
+        })
+        .catch(error => {
+          console.error("Web search failed:", error);
+          // Show error toast if not already shown
+          toast.error('Web search failed. You can try again.', { id: 'web-search-toast' });
+          // Don't reset automatically on error either
+        });
+      
+      // Clear input field immediately so user can type a new message
+      setInput('');
     } else {
-      console.log("handleSubmit called");
-      handleSubmit(undefined, {
-        experimental_attachments: attachments,
-      });
+      console.log("handleSubmit called - regular chat message");
+      // Normal submission - single API call
+      try {
+        handleSubmit(undefined, {
+          experimental_attachments: attachments,
+        });
+      } catch (error) {
+        console.error("Message submission failed:", error);
+        toast.error('Failed to send message. Please try again.');
+      }
     }
 
     setAttachments([]);
@@ -257,6 +400,7 @@ Based on these sources, answer the user's question in a clear, concise, and accu
     append,
     input,
     handleWebSearch,
+    setInput,
   ]);
 
   const uploadFile = async (file: File) => {
@@ -420,7 +564,7 @@ Based on these sources, answer the user's question in a clear, concise, and accu
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
         <WebSearchButton 
           input={input} 
-          handleWebSearch={() => setWebSearchActive(!webSearchActive)} 
+          handleWebSearch={() => setWebSearchActive(true)} 
           status={status}
           isActive={webSearchActive}
         />
@@ -625,6 +769,7 @@ function tryParseJSON(text: string): string {
  * @returns The extracted content if successful, empty string otherwise
  */
 function extractStreamContent(text: string): string {
+  // More robust pattern to handle all streaming formats
   const streamPattern = /(\d+):"([^"]*)"/g;
   const contentChunks: string[] = [];
   let match;
@@ -634,7 +779,10 @@ function extractStreamContent(text: string): string {
   }
   
   if (contentChunks.length > 0) {
-    return cleanText(contentChunks.join(''));
+    // Just concatenate the chunks without additional processing
+    const fullText = contentChunks.join('');
+    console.log("Full extracted text:", fullText);
+    return fullText.trim();
   }
   
   return '';

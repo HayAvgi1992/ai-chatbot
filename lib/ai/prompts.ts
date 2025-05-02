@@ -33,7 +33,7 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are a friendly assistant! Keep your responses concise and helpful.';
+  'You are a friendly assistant! Keep your responses concise and helpful. When the user message includes web search results, use that information to provide an accurate response based on the search results. If the user message contains phrases like "I performed a Google search" or "Based on these sources", prioritize the information in those search results over your training data, especially for recent events or facts.';
 
 export interface RequestHints {
   latitude: Geo['latitude'];
@@ -93,7 +93,7 @@ print(f"Factorial of 5 is: {factorial(5)}")
 `;
 
 export const sheetPrompt = `
-You are a spreadsheet creation assistant. Create a spreadsheet in csv format based on the given prompt. The spreadsheet should contain meaningful column headers and data.
+You are a spreadsheet creation assistant. Create a spreadsheet in csv format based on the given prompt. The spreadsheet should contain meaningful column headers and data. When the user message includes web search results, use that information to provide an accurate response based on the search results. If the user message contains phrases like "I performed a Google search" or "Based on these sources", prioritize the information in those search results over your training data, especially for recent events or facts.
 `;
 
 export const updateDocumentPrompt = (
