@@ -58,7 +58,7 @@ function PureMultimodalInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
-  const [webSearchActive, setWebSearchActive] = useState(true);
+  const [webSearchActive, setWebSearchActive] = useState(false);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -153,33 +153,6 @@ function PureMultimodalInput({
 
       // Save the user's query message to the chat
       await saveMessageToChat(input);
-    
-      // Make direct API call and handle streaming properly
-      //const addPromptToChatResponse = await fetch('/api/chat', {
-      //  method: 'POST',
-      //  headers: {
-      //    'Content-Type': 'application/json',
-      //  },
-      //  body: JSON.stringify({
-      //    id: chatId,
-      //    selectedChatModel: 'claude-3-sonnet',
-      //    selectedVisibilityType: 'private',
-      //    saveUserMessage: true,
-      //    addMessageToModel: false,
-      //    message: {
-      //      id: userMessageId, // Use a different ID for this "hidden" request
-      //      role: 'user',
-      //      content: input,
-      //      parts: [{ type: 'text', text: input }],
-      //      createdAt: new Date().toISOString(),
-      //    },
-      //  }),
-      //});
-      
-      //if (!addPromptToChatResponse.ok) {
-      //  throw new Error(`AI response failed: ${addPromptToChatResponse.statusText}`);
-      //}
-
       // First fetch the search results
       const response = await fetch(
         'https://google.serper.dev/search',
@@ -278,7 +251,6 @@ User question: ${input}`;
             }
           ]);
 
-          //await saveMessageToChat(extractedContent, 'assistant');
         } else {
           // Fallback if we couldn't extract content
           setMessages((currentMessages) => [
@@ -352,6 +324,8 @@ User question: ${input}`;
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
   const submitForm = useCallback(() => {
+    if (!input.trim()) return;
+    
     window.history.replaceState({}, '', `/chat/${chatId}`);
     
     if (webSearchActive) {
@@ -363,7 +337,7 @@ User question: ${input}`;
       // Clear input field immediately
       setInput('');
       
-      // Perform web search (will handle showing the user message)
+      // Perform web search
       handleWebSearch(userQuestion)
         .catch(error => {
           console.error("Web search failed:", error);
@@ -375,6 +349,8 @@ User question: ${input}`;
       handleSubmit(undefined, {
         experimental_attachments: attachments,
       });
+      
+      setInput('');
     }
 
     setAttachments([]);
@@ -458,6 +434,24 @@ User question: ${input}`;
     }
   }, [status, scrollToBottom]);
 
+  // Function to toggle web search mode with user feedback
+  const toggleWebSearch = useCallback(() => {
+    const newState = !webSearchActive;
+    setWebSearchActive(newState);
+    
+    if (newState) {
+      toast.success('Web search mode activated! Type your query and hit Search or Enter.', {
+        id: 'web-search-mode',
+        duration: 2000,
+      });
+    } else {
+      toast.info('Regular chat mode activated.', {
+        id: 'web-search-mode',
+        duration: 2000,
+      });
+    }
+  }, [webSearchActive]);
+
   return (
     <div className="relative w-full flex flex-col gap-4">
       <AnimatePresence>
@@ -526,7 +520,7 @@ User question: ${input}`;
       <Textarea
         data-testid="multimodal-input"
         ref={textareaRef}
-        placeholder="Send a message..."
+        placeholder={webSearchActive ? "Enter a web search query..." : "Send a message..."}
         value={input}
         onChange={handleInput}
         className={cx(
@@ -545,6 +539,8 @@ User question: ${input}`;
 
             if (status !== 'ready') {
               toast.error('Please wait for the model to finish its response!');
+            } else if (!input.trim()) {
+              toast.error('Please enter a message first!');
             } else {
               submitForm();
             }
@@ -556,9 +552,10 @@ User question: ${input}`;
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
         <WebSearchButton 
           input={input} 
-          toggleWebSearch={() => setWebSearchActive(!webSearchActive)} 
+          toggleWebSearch={toggleWebSearch} 
           status={status}
           isActive={webSearchActive}
+          handleSearch={handleWebSearch}
         />
       </div>
 
@@ -570,6 +567,7 @@ User question: ${input}`;
             input={input}
             submitForm={submitForm}
             uploadQueue={uploadQueue}
+            isWebSearchActive={webSearchActive}
           />
         )}
       </div>
@@ -641,10 +639,12 @@ function PureSendButton({
   submitForm,
   input,
   uploadQueue,
+  isWebSearchActive,
 }: {
   submitForm: () => void;
   input: string;
   uploadQueue: Array<string>;
+  isWebSearchActive: boolean;
 }) {
   return (
     <Button
@@ -656,7 +656,14 @@ function PureSendButton({
       }}
       disabled={input.length === 0 || uploadQueue.length > 0}
     >
-      <ArrowUpIcon size={14} />
+      {isWebSearchActive ? (
+        <div className="flex items-center">
+          <SearchIcon size={14} />
+          <span className="ml-1 text-xs">Search</span>
+        </div>
+      ) : (
+        <ArrowUpIcon size={14} />
+      )}
     </Button>
   );
 }
@@ -665,17 +672,20 @@ const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
   if (prevProps.uploadQueue.length !== nextProps.uploadQueue.length)
     return false;
   if (prevProps.input !== nextProps.input) return false;
+  if (prevProps.isWebSearchActive !== nextProps.isWebSearchActive) return false;
   return true;
 });
 
 function PureWebSearchButton({
   input,
   toggleWebSearch,
+  handleSearch,
   status,
   isActive,
 }: {
   input: string;
   toggleWebSearch: () => void;
+  handleSearch: (input: string) => Promise<void>;
   status: UseChatHelpers['status'];
   isActive: boolean;
 }) {
@@ -688,7 +698,13 @@ function PureWebSearchButton({
       )}
       onClick={(event) => {
         event.preventDefault();
-        toggleWebSearch();
+        if (input.trim().length > 0 && isActive) {
+          // If input exists and web search is active, directly trigger search
+          handleSearch(input);
+        } else {
+          // Otherwise just toggle the mode
+          toggleWebSearch();
+        }
       }}
       disabled={status !== 'ready'}
       variant="outline"
