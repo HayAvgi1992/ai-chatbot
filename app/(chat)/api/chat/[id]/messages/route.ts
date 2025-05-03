@@ -22,12 +22,14 @@ const saveMessageSchema = z.object({
 });
 
 export async function GET(
-  request: NextRequest,
-  context: { params: { id: string } }
+  request: NextRequest
 ) {
+  // Extract id from URL pattern - get the ID segment, not "messages"
+  const pathParts = request.nextUrl.pathname.split('/');
+  // The UUID is the second-to-last segment in the path /api/chat/[id]/messages
+  const id = pathParts[pathParts.length - 2];
   try {
     // Need to await params in Next.js App Router
-    const { id } = await context.params;
     console.log("GET messages for chat ID:", id);
 
     const session = await auth();
@@ -63,12 +65,14 @@ export async function GET(
 }
 
 export async function POST(
-  request: NextRequest,
-  context: { params: { id: string } }
+  request: NextRequest
 ) {
   try {
+    // Extract id from URL pattern - get the ID segment, not "messages"
+    const pathParts = request.nextUrl.pathname.split('/');
+    // The UUID is the second-to-last segment in the path /api/chat/[id]/messages
+    const chatId = pathParts[pathParts.length - 2];
     // Need to await params in Next.js App Router
-    const { id: chatId } = await context.params;
     console.log("POST message for chat ID:", chatId);
     
     const session = await auth();
