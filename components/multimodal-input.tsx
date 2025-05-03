@@ -360,11 +360,18 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
         // Get raw data
         const rawData = await response.json();
         console.log('Brave Search API raw response:', rawData);
+        try {
+          // Decode any escaped characters in the response
+          searchData = JSON.parse(JSON.stringify(rawData).replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+          console.log('Brave Search API decoded response:', searchData);
+        } catch (error) {
+          console.error("Error decoding response:", error);
+          // Assign search data directly - it's already parsed JSON
+          searchData = rawData;
+        }
         
-        // Decode any escaped characters in the response
-        // This ensures \n and other escape sequences are properly handled
-        searchData = JSON.parse(JSON.stringify(rawData).replace(/\\n/g, '\n').replace(/\\"/g, '"'));
-        console.log('Brave Search API decoded response:', searchData);
+        // Handle any string escaping in the formatting function instead
+        console.log('Brave Search API assigned data:', searchData);
       }
       
       console.log(`Search results received from ${provider}:`, searchData);
@@ -376,7 +383,9 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
       
       // Create formatted content with search results and instructions for Claude
       const formattedContent = webSearchEnhancedPrompt(formattedResults, input);
-
+      
+      // Add a clear marker at the beginning to identify this as a web search response
+      const markedContent = `<search_results>\n${formattedContent}\n</search_results>`;
       
       // Make direct API call and handle streaming properly
       const aiResponse = await fetch('/api/chat', {
@@ -393,8 +402,8 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
           message: {
             id: uuidv4(), // Use a different ID for this "hidden" request
             role: 'user',
-            content: formattedContent,
-            parts: [{ type: 'text', text: formattedContent }],
+            content: markedContent,
+            parts: [{ type: 'text', text: markedContent }],
             createdAt: new Date().toISOString(),
           },
         }),
@@ -1014,3 +1023,4 @@ export const MultimodalInput = memo(
     return true;
   },
 );
+

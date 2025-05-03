@@ -229,19 +229,29 @@ export async function POST(request: Request) {
                   });
 
                   console.log("onFinish Assistant Message: ", assistantMessage.role);
-                  await saveMessages({
-                    messages: [
-                      {
-                        id: assistantId,
-                        chatId: id,
-                        role: assistantMessage.role,
-                        parts: assistantMessage.parts,
-                        attachments:
-                          assistantMessage.experimental_attachments ?? [],
-                        createdAt: new Date(),
-                      },
-                    ],
-                  });
+                  
+                  // Skip saving if this is a web search response (handled separately by web search component)
+                  const isWebSearchResponse = 
+                    message.content.includes('<search_results>') || 
+                    message.content.toLowerCase().includes('web search results');
+                    
+                  if (!isWebSearchResponse) {
+                    await saveMessages({
+                      messages: [
+                        {
+                          id: assistantId,
+                          chatId: id,
+                          role: assistantMessage.role,
+                          parts: assistantMessage.parts,
+                          attachments:
+                            assistantMessage.experimental_attachments ?? [],
+                          createdAt: new Date(),
+                        },
+                      ],
+                    });
+                  } else {
+                    console.log("Skipping save for web search response - already handled by web search component");
+                  }
                 } catch (error) {
                   console.error('Failed to save chat message:', error);
                 }
