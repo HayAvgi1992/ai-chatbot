@@ -30,13 +30,19 @@ import { geolocation } from '@vercel/functions';
 
 // Helper function to convert database messages to CoreMessage format
 function convertToCoreMessages(messages: any[]): CoreMessage[] {
+  // Define an interface for the message parts
+  interface MessagePart {
+    type: string;
+    text?: string;
+  }
+
   return messages.map(message => {
     // For messages with parts, convert them to content
     if (message.parts && Array.isArray(message.parts)) {
       return {
         role: message.role,
-        content: message.parts.map(part => 
-          part.type === 'text' ? part.text : ''
+        content: message.parts.map((part: MessagePart) => 
+          part.type === 'text' ? part.text || '' : ''
         ).join(' ').trim()
       };
     }
