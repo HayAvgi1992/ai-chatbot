@@ -1,10 +1,5 @@
 import {
-  extractReasoningMiddleware,
-  wrapLanguageModel,
   LanguageModelV1,
-  StreamingTextGenerationMethod,
-  TextGenerationMethod,
-  RunnerMethod,
   type ImageModel as ImageModelV1
 } from 'ai';
 import { isTestEnvironment } from '../constants';
@@ -22,7 +17,7 @@ function createTogetherAIModel(modelId: string): LanguageModelV1 {
     provider: {
       id: 'togetherai',
       brand: 'TogetherAI',
-    },
+    } as any, // Cast to any to avoid type error
     modelId,
     defaultObjectGenerationMode: 'json',
     supportedFeatures: {
@@ -32,7 +27,7 @@ function createTogetherAIModel(modelId: string): LanguageModelV1 {
     objectGenerationMethods: {},
     
     textGenerationMethods: {
-      generate: (async ({ prompt, ...params }) => {
+      generate: async ({ prompt, ...params }: { prompt: string, [key: string]: any }) => {
         try {
           const response = await fetch('https://api.together.xyz/v1/chat/completions', {
             method: 'POST',
@@ -58,9 +53,12 @@ function createTogetherAIModel(modelId: string): LanguageModelV1 {
           console.error('TogetherAI error:', error);
           throw error;
         }
-      }) as TextGenerationMethod,
+      },
 
-      stream: (async ({ prompt, ...params }, { signal, onToken }) => {
+      stream: async (
+        { prompt, ...params }: { prompt: string, [key: string]: any }, 
+        { signal, onToken }: { signal?: AbortSignal, onToken: (token: { text: string }) => void }
+      ) => {
         let done = false;
         try {
           const response = await fetch('https://api.together.xyz/v1/chat/completions', {
@@ -119,10 +117,10 @@ function createTogetherAIModel(modelId: string): LanguageModelV1 {
           console.error('TogetherAI streaming error:', error);
           throw error;
         }
-      }) as StreamingTextGenerationMethod,
+      },
     },
     
-    runnerMethods: {} as Record<string, RunnerMethod>,
+    runnerMethods: {} as Record<string, any>,
   };
 }
 
@@ -164,7 +162,7 @@ export const myProvider = {
       provider: 'openai', // Can be changed based on your provider
       modelId: modelName,
       maxImagesPerCall: 1,
-      doGenerate: async ({ prompt, n }) => {
+      doGenerate: async ({ prompt, n }: { prompt: string, n?: number }) => {
         // Mock implementation for now
         console.log(`Generating ${n} image(s) with prompt: ${prompt}`);
         
