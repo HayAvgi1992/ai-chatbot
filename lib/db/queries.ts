@@ -214,7 +214,6 @@ export async function getMessagesByChatId({ id }: { id: string }) {
       .where(eq(message.chatId, id))
       .orderBy(asc(message.createdAt));
     console.log('Successfully retrieved messages:', result);
-    console.log('Result type:', result.parts);
     return result;
   } catch (error) {
     console.error('Failed to get messages by chat id from database. Error details:', error);
