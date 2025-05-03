@@ -12,18 +12,15 @@ const anthropicProvider = createAnthropic({
 
 // Create a wrapper for TogetherAI that conforms to the LanguageModelV1 interface
 function createTogetherAIModel(modelId: string): LanguageModelV1 {
-  return {
+  // Create a model implementation that works with TogetherAI
+  const model = {
     specificationVersion: 'v1',
     provider: {
       id: 'togetherai',
       brand: 'TogetherAI',
-    } as any, // Cast to any to avoid type error
+    },
     modelId,
     defaultObjectGenerationMode: 'json',
-    supportedFeatures: {
-      streamingTextGeneration: true,
-      textGeneration: true,
-    },
     objectGenerationMethods: {},
     
     textGenerationMethods: {
@@ -122,6 +119,9 @@ function createTogetherAIModel(modelId: string): LanguageModelV1 {
     
     runnerMethods: {} as Record<string, any>,
   };
+  
+  // Cast to LanguageModelV1 to avoid type errors
+  return model as unknown as LanguageModelV1;
 }
 
 // Export the provider with both TogetherAI and Anthropic options
