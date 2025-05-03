@@ -194,7 +194,7 @@ export async function POST(request: Request) {
                 : [
                     // Disable all automatic tools for web search responses
                     'getWeather',
-                    'createDocument',
+                    // 'createDocument', // Temporarily disabled document creation
                     'updateDocument',
                     'requestSuggestions',
                   ],
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
             experimental_generateMessageId: generateUUID,
             tools: {
               getWeather,
-              createDocument: createDocument({ session, dataStream }),
+              // createDocument: createDocument({ session, dataStream }), // Temporarily disabled document creation
               updateDocument: updateDocument({ session, dataStream }),
               requestSuggestions: requestSuggestions({
                 session,

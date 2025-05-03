@@ -474,6 +474,7 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
               id: assistantMessageId,
               content: extractedContent,
               role: 'assistant',
+              parts: [{ type: 'text', text: extractedContent }],
               createdAt: new Date(),
             }
           ]);
@@ -496,6 +497,7 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
               id: fallbackMessageId,
               content: "Error processing search results. Please try again.",
               role: 'assistant',
+              parts: [{ type: 'text', text: "Error processing search results. Please try again." }],
               createdAt: new Date(),
             }
           ]);
