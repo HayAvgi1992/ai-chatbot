@@ -153,4 +153,15 @@ export const myProvider = {
     // For any other models, use default TogetherAI
     return createTogetherAIModel('mistralai/Mixtral-8x7B-Instruct-v0.1');
   },
+  
+  // Add support for image models
+  imageModel: (modelName: string) => {
+    // This is a placeholder - If we would like to add image generation, add it
+    // based on the image generation service you're using
+    return {
+      name: modelName,
+      provider: 'openai',
+      // Add any additional properties needed by experimental_generateImage
+    };
+  }
 };
