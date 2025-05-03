@@ -256,7 +256,6 @@ YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
 
 User question: ${input}`;
 
-      console.log("BEFORE SENDING TO SERVER");
       
       // Make direct API call and handle streaming properly
       const aiResponse = await fetch('/api/chat', {
