@@ -127,7 +127,7 @@ function createTogetherAIModel(modelId: string): LanguageModelV1 {
 
 // Export the provider with both TogetherAI and Anthropic options
 export const myProvider = {
-  languageModel: (modelName: string) => {
+  languageModel: (modelName: string): LanguageModelV1 => {
     // Handle Anthropic Claude models
     if (modelName.startsWith('claude-')) {
       // Use simple base names without version dates
@@ -142,35 +142,12 @@ export const myProvider = {
       console.log("Using Anthropic model:", actualModelName);
       
       // Use the AI SDK's Anthropic provider
-      return anthropicProvider(actualModelName);
+      return anthropicProvider(actualModelName) as LanguageModelV1;
     }
     
-    // For other models, fix the TogetherAI model to properly implement doGenerate
+    // For other models, return a properly typed TogetherAI model
     if (modelName === 'chat-model' || modelName === 'chat-model-reasoning') {
-      const togetherModel = createTogetherAIModel(
-        'mistralai/Mixtral-8x7B-Instruct-v0.1'
-      );
-      
-      // Add the missing doGenerate function
-      const enhancedModel = {
-        ...togetherModel,
-        doGenerate: async function(prompt: string, options?: any) {
-          const result = await togetherModel.textGenerationMethods.generate({
-            prompt,
-            ...options
-          });
-          return result;
-        },
-        doStream: async function(prompt: string, options?: any) {
-          const { signal, onToken } = options || {};
-          return togetherModel.textGenerationMethods.stream(
-            { prompt, ...options },
-            { signal, onToken: onToken || (() => {}) }
-          );
-        }
-      };
-      
-      return enhancedModel;
+      return createTogetherAIModel('mistralai/Mixtral-8x7B-Instruct-v0.1');
     }
     
     // For any other models, use default TogetherAI
