@@ -27,6 +27,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
+import { webSearchEnhancedPrompt } from '@/lib/ai/prompts';
 
 // Custom hooks for this component
 function useTextareaHandling() {
@@ -140,17 +141,68 @@ function useFileAttachments(setAttachments: Dispatch<SetStateAction<Array<Attach
 
 function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']) {
   const [webSearchActive, setWebSearchActive] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0); // 0 for Google SERP, 1 for Brave
   
   // Handle web search
-  const handleWebSearch = useCallback(async (input: string): Promise<void> => {
+  const handleWebSearch = useCallback(async (input: string, searchIndex: number = 0): Promise<void> => {
+    console.log(`handleWebSearch called - processing search for: ${input} using provider index: ${searchIndex}`);
     const userMessageId = uuidv4();
     if (!input.trim()) return;
     
     // Message saving helper - moved inside the callback
     const saveMessageToChat = async (content: string, role: 'user' | 'assistant' = 'user') => {
+      console.log(`Saving ${role} message to chat:`, content.substring(0, 50) + '...');
+      
       try {
+        // Check if content is empty
+        if (!content || content.trim() === '') {
+          console.error("Cannot save empty message");
+          return;
+        }
+
+        // Generate an ID for this message
         const messageId = uuidv4();
-        // Use the /api/chat/[id]/messages endpoint 
+        
+        // First, check if the chat exists by trying to get its messages
+        const checkResponse = await fetch(`/api/chat/${chatId}/messages`);
+        
+        // If response is 404, create the chat first
+        if (checkResponse.status === 404) {
+          console.log(`Chat ${chatId} not found, creating new chat`);
+          // Create a new chat
+          const createChatResponse = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              id: chatId,
+              title: `Web Search: ${content.substring(0, 30)}${content.length > 30 ? '...' : ''}`,
+              selectedChatModel: 'claude-3-sonnet', 
+              selectedVisibilityType: 'private',
+              message: {
+                id: uuidv4(),
+                role: 'user',
+                content: content,
+                parts: [{ type: 'text', text: content }],
+                createdAt: new Date().toISOString()
+              },
+              saveUserMessage: true,
+              addMessageToModel: true
+            }),
+          });
+          
+          if (!createChatResponse.ok) {
+            const errorText = await createChatResponse.text();
+            console.error(`Failed to create chat: ${createChatResponse.status}`, errorText);
+            throw new Error(`Failed to create chat: ${createChatResponse.status} ${createChatResponse.statusText}`);
+          }
+          
+          console.log(`Chat ${chatId} created successfully`);
+          return messageId; // Return early since message is included in chat creation
+        }
+        
+        // Create the request with complete message data format
         const response = await fetch(`/api/chat/${chatId}/messages`, {
           method: 'POST',
           headers: {
@@ -158,53 +210,81 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
           },
           body: JSON.stringify({
             id: messageId,
-            role: role,
-            content: content,
+            content,
+            role,
             parts: [{ type: 'text', text: content }],
-            createdAt: new Date().toISOString(),
+            createdAt: new Date().toISOString()
           }),
         });
-
+        
         if (!response.ok) {
-          console.error('Failed to save message:', response.status);
-          return null;
+          const errorText = await response.text();
+          console.error(`Error saving message (${response.status}): ${errorText}`);
+          throw new Error(`Failed to save message: ${response.status} ${response.statusText}`);
         }
-
-        const updatedMessages = await response.json();
-        setMessages(updatedMessages);
+        
+        console.log("Message saved successfully");
         return messageId;
       } catch (error) {
-        console.error('Error saving message:', error);
-        return null;
+        console.error('Error in saveMessageToChat:', error);
+        throw error;
       }
     };
     
     // Format search results helper - moved inside the callback
-    const formatSearchResults = (searchData: any): string => {
+    const formatSearchResults = (searchData: any, provider: string): string => {
       if (!searchData) {
         return 'No search results found.';
       }
       
-      const { organic, peopleAlsoAsk } = searchData;
-      let formattedResults = '';
+      let formattedResults = `SEARCH PROVIDER: ${provider}\n\n`;
       
-      // Add the organic results (text search results)
-      if (organic && Array.isArray(organic)) {
-        formattedResults += `TOP SEARCH RESULTS:\n\n`;
-        const topResults = organic.slice(0, 3); // Take top 3 results
+      // Helper function to decode escaped strings
+      const decodeEscapedText = (text: string): string => {
+        if (!text) return '';
+        return text
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"')
+          .replace(/\\'/g, "'")
+          .replace(/\\\\/g, '\\');
+      };
+      
+      if (provider === 'Google SERP') {
+        const { organic, peopleAlsoAsk } = searchData;
         
-        topResults.forEach((result, index) => {
-          formattedResults += `[${index + 1}] ${result.title}\n${result.snippet}\n\n`;
-        });
+        // Add the organic results (text search results)
+        if (organic && Array.isArray(organic)) {
+          formattedResults += `TOP SEARCH RESULTS:\n\n`;
+          const topResults = organic.slice(0, 3); // Take top 3 results
+          
+          topResults.forEach((result, index) => {
+            formattedResults += `[${index + 1}] ${decodeEscapedText(result.title)}\n${decodeEscapedText(result.snippet)}\n\n`;
+          });
+        }
+        
+        // Add frequently asked questions if available
+        if (peopleAlsoAsk && Array.isArray(peopleAlsoAsk) && peopleAlsoAsk.length > 0) {
+          formattedResults += `FREQUENTLY ASKED QUESTIONS:\n\n`;
+          peopleAlsoAsk.slice(0, 2).forEach((item, index) => {
+            formattedResults += `Q: ${decodeEscapedText(item.question)}\nA: ${decodeEscapedText(item.snippet)}\n\n`;
+          });
+        }
+      } else if (provider === 'Brave Search') {
+        // Format Brave search results
+        if (searchData.web && Array.isArray(searchData.web.results)) {
+          formattedResults += `TOP SEARCH RESULTS:\n\n`;
+          const topResults = searchData.web.results.slice(0, 3);
+          
+          topResults.forEach((result: any, index: number) => {
+            formattedResults += `[${index + 1}] ${decodeEscapedText(result.title)}\n${decodeEscapedText(result.description)}\n${result.url}\n\n`;
+          });
+        }
       }
       
-      // Add frequently asked questions if available
-      if (peopleAlsoAsk && Array.isArray(peopleAlsoAsk) && peopleAlsoAsk.length > 0) {
-        formattedResults += `FREQUENTLY ASKED QUESTIONS:\n\n`;
-        peopleAlsoAsk.slice(0, 2).forEach((item, index) => {
-          formattedResults += `Q: ${item.question}\nA: ${item.snippet}\n\n`;
-        });
-      }
+      // Final decode to catch any remaining escapes
+      formattedResults = decodeEscapedText(formattedResults);
       
       // Ensure the content doesn't exceed validation limits
       return formattedResults.slice(0, 8000);
@@ -214,48 +294,88 @@ function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']
     toast.loading('Searching the web...', { id: toastId });
     
     try {
-      // Save the user's query message to the chat
-      await saveMessageToChat(input);
+      // First, update the UI with the user's message immediately
+      const userMessageObject = {
+        id: userMessageId,
+        content: input,
+        role: 'user' as const,
+        createdAt: new Date(),
+      };
       
-      // First fetch the search results
-      const response = await fetch(
-        'https://google.serper.dev/search',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-KEY': 'cc8a9b97abc4d9945867f9ddced1a42f0b26ce88',
-          },
-          body: JSON.stringify({ q: input }),
+      // Add user message to UI immediately
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        userMessageObject
+      ]);
+      
+      // Save the user's query message to the chat 
+      // If this fails, continue anyway with the search
+      try {
+        await saveMessageToChat(input);
+      } catch (saveError) {
+        console.error("Error saving user message:", saveError);
+        toast.error("Couldn't save your question to database, but continuing with search", {
+          id: 'message-save-error',
+          duration: 2000,
         });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
       }
-    
-      const searchData = await response.json();
-      console.log("Search results received:", searchData);
+      
+      let searchData;
+      let provider = searchIndex === 0 ? 'Google SERP' : 'Brave Search';
+      
+      if (searchIndex === 0) {
+        console.log('Google SERP API');
+        // Google SERP API via our server-side proxy
+        const response = await fetch(
+          '/api/google-search',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ q: input }),
+          });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+      
+        searchData = await response.json();
+      } else {
+        console.log('Brave Search API');
+        // Brave Search API via our server-side proxy
+        const response = await fetch(
+          `/api/brave-search?q=${encodeURIComponent(input)}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+      
+        // Get raw data
+        const rawData = await response.json();
+        console.log('Brave Search API raw response:', rawData);
+        
+        // Decode any escaped characters in the response
+        // This ensures \n and other escape sequences are properly handled
+        searchData = JSON.parse(JSON.stringify(rawData).replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+        console.log('Brave Search API decoded response:', searchData);
+      }
+      
+      console.log(`Search results received from ${provider}:`, searchData);
 
       // Format search results for the user
-      const formattedResults = formatSearchResults(searchData);
+      const formattedResults = formatSearchResults(searchData, provider);
       
       toast.loading('Processing with Claude...', { id: toastId });
       
       // Create formatted content with search results and instructions for Claude
-      const formattedContent = `<search_results>
-${formattedResults}
-</search_results>
-
-YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
-1. You have been given search results between <search_results> tags above.
-2. The user's question is: "${input}"
-3. Answer ONLY using information from these search results.
-4. DO NOT claim you don't have access to real-time or current information.
-5. If the search results contain the answer, provide it clearly.
-6. If the search results do not contain the answer, provide a clear and concise answer based on the search results.
-7. If the search results are not relevant to the user's question, provide a clear and concise answer that you do not have access to the information.
-
-User question: ${input}`;
+      const formattedContent = webSearchEnhancedPrompt(formattedResults, input);
 
       
       // Make direct API call and handle streaming properly
@@ -288,38 +408,93 @@ User question: ${input}`;
       try {
         // Get the full response as text
         const responseText = await aiResponse.text();
+        console.log("Raw AI response:", responseText);
         
         // Extract all the text chunks from the format 0:"text"
         let extractedContent = "";
         const contentMatches = responseText.matchAll(/0:"([^"]+)"/g);
         
         // Combine all matches into one response
+        let matchFound = false;
         for (const match of contentMatches) {
+          matchFound = true;
           if (match[1]) {
             extractedContent += match[1];
           }
         }
         
+        // If no matches were found, try to use the entire response text
+        if (!matchFound && responseText) {
+          // Try to extract content from JSON if it looks like JSON
+          try {
+            if (responseText.trim().startsWith('{')) {
+              const jsonResponse = JSON.parse(responseText);
+              if (jsonResponse && jsonResponse.text) {
+                extractedContent = jsonResponse.text;
+              }
+            } else {
+              // Use the raw text if it's not JSON
+              extractedContent = responseText;
+            }
+          } catch (jsonError) {
+            console.error("Error parsing response as JSON:", jsonError);
+            // Use the raw text as fallback
+            extractedContent = responseText;
+          }
+        }
+        
         console.log("Extracted content:", extractedContent);
         
+        // Decode any escaped characters in the response
+        try {
+          // Replace escape sequences with their actual characters
+          extractedContent = extractedContent
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\'/g, "'")
+            .replace(/\\\\/g, '\\');
+            
+          console.log("Decoded extracted content:", extractedContent);
+        } catch (decodeError) {
+          console.error("Error decoding content:", decodeError);
+          // Continue with the original content if decoding fails
+        }
+        
         // If we got content, save the assistant message
-        if (extractedContent) {
+        if (extractedContent && extractedContent.trim() !== '') {
+          // Create a new ID for the assistant message
+          const assistantMessageId = uuidv4();
+          
+          // Update UI immediately
           setMessages((currentMessages) => [
             ...currentMessages,
             {
-              id: userMessageId,
+              id: assistantMessageId,
               content: extractedContent,
               role: 'assistant',
               createdAt: new Date(),
             }
           ]);
+          
+          // Then try to save to database
+          try {
+            await saveMessageToChat(extractedContent, 'assistant');
+          } catch (saveError) {
+            console.error("Failed to save assistant message to chat:", saveError);
+            // UI already updated, so no need to show error to user
+          }
         } else {
-          // Fallback if we couldn't extract content
+          // Only add fallback if we couldn't extract any content
+          const fallbackMessageId = uuidv4();
+          
+          // Show fallback message in UI
           setMessages((currentMessages) => [
             ...currentMessages,
             {
-              id: userMessageId,
-              content: "Based on the search results, I found information but couldn't format it properly. Please try again.",
+              id: fallbackMessageId,
+              content: "Error processing search results. Please try again.",
               role: 'assistant',
               createdAt: new Date(),
             }
@@ -327,7 +502,24 @@ User question: ${input}`;
         }
       } catch (error) {
         console.error("Error processing response:", error);
-        await saveMessageToChat("Error processing the search results. Please try again.", 'assistant');
+        
+        // Create a unique ID for the error message
+        const errorMessageId = uuidv4();
+        
+        // Add error message to UI instead of saving to chat
+        setMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: errorMessageId,
+            content: "Error processing the search results. Please try again.",
+            role: 'assistant',
+            createdAt: new Date(),
+          }
+        ]);
+        
+        // Complete the request
+        toast.success('Web search completed with errors', { id: toastId });
+        return; // Exit early to prevent further processing
       }
       
       toast.success('Web search completed', { id: toastId });
@@ -341,12 +533,18 @@ User question: ${input}`;
   }, [chatId, setMessages]);
 
   // Toggle web search mode
-  const toggleWebSearch = useCallback(() => {
+  const toggleWebSearch = useCallback((searchIndex: number = 0) => {
+    // If we're activating search or switching index while active, update the index
+    if (!webSearchActive || (webSearchActive && activeSearchIndex !== searchIndex)) {
+      setActiveSearchIndex(searchIndex);
+    }
+    
     const newState = !webSearchActive;
     setWebSearchActive(newState);
     
     if (newState) {
-      toast.success('Web search mode activated! Type your query and hit Search or Enter.', {
+      const provider = searchIndex === 0 ? 'Google SERP' : 'Brave Search';
+      toast.success(`Web search mode activated using ${provider == 'Google SERP' ? 'Mystery 1' : 'Mystery 2'}! Type your query and hit Search or Enter.`, {
         id: 'web-search-mode',
         duration: 2000,
       });
@@ -356,10 +554,11 @@ User question: ${input}`;
         duration: 2000,
       });
     }
-  }, [webSearchActive]);
+  }, [webSearchActive, activeSearchIndex]);
 
   return {
     webSearchActive,
+    activeSearchIndex,
     handleWebSearch,
     toggleWebSearch,
   };
@@ -512,28 +711,37 @@ function WebSearchButton({
   handleSearch,
   status,
   isActive,
+  searchIndex,
+  activeSearchIndex,
+  label
 }: {
   input: string;
-  toggleWebSearch: () => void;
-  handleSearch: (input: string) => Promise<void>;
+  toggleWebSearch: (searchIndex: number) => void;
+  handleSearch: (input: string, searchIndex: number) => Promise<void>;
   status: UseChatHelpers['status'];
   isActive: boolean;
+  searchIndex: number;
+  activeSearchIndex: number;
+  label: string;
 }) {
+  // Button is active if web search is active and this button's index matches active index
+  const isThisButtonActive = isActive && activeSearchIndex === searchIndex;
+  
   return (
     <Button
-      data-testid="web-search-button"
+      data-testid={`web-search-button-${searchIndex}`}
       className={cx(
-        "rounded-md rounded-bl-lg p-[7px] h-fit dark:border-white border-black hover:dark:bg-zinc-900 hover:bg-zinc-200",
-        isActive && "bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 hover:dark:bg-blue-700 text-white"
+        "rounded-md px-2 py-1 h-fit dark:border-white border-black hover:dark:bg-zinc-900 hover:bg-zinc-200 mr-2",
+        isThisButtonActive && "bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 hover:dark:bg-blue-700 text-white"
       )}
       onClick={(event) => {
         event.preventDefault();
-        if (input.trim().length > 0 && isActive) {
-          // If input exists and web search is active, directly trigger search
-          handleSearch(input);
+        if (input.trim().length > 0 && isThisButtonActive) {
+          // If input exists and this button's search is active, directly trigger search
+          handleSearch(input, searchIndex);
         } else {
-          // Otherwise just toggle the mode
-          toggleWebSearch();
+          // Otherwise toggle the mode with this button's index
+          toggleWebSearch(searchIndex);
         }
       }}
       disabled={status !== 'ready'}
@@ -541,7 +749,7 @@ function WebSearchButton({
     >
       <div className="flex items-center">
         <SearchIcon size={14} />
-        <span className="ml-1">{isActive ? "Web Search Active" : "Web Search"}</span>
+        <span className="ml-1">{isThisButtonActive ? `${label} Active` : label}</span>
       </div>
     </Button>
   );
@@ -594,6 +802,7 @@ function PureMultimodalInput({
   
   const {
     webSearchActive,
+    activeSearchIndex,
     handleWebSearch,
     toggleWebSearch,
   } = useWebSearch(chatId, setMessages);
@@ -626,7 +835,7 @@ function PureMultimodalInput({
       setInput('');
       
       // Perform web search
-      handleWebSearch(userQuestion)
+      handleWebSearch(userQuestion, activeSearchIndex)
         .catch(error => {
           console.error("Web search failed:", error);
           toast.error('Web search failed. Please try again.', { id: 'web-search-toast' });
@@ -660,7 +869,8 @@ function PureMultimodalInput({
     handleWebSearch,
     setInput,
     resetHeight,
-    textareaRef
+    textareaRef,
+    activeSearchIndex
   ]);
 
   return (
@@ -747,13 +957,31 @@ function PureMultimodalInput({
       {/* Bottom buttons row */}
       <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start gap-2">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
-        <WebSearchButton 
-          input={input} 
-          toggleWebSearch={toggleWebSearch} 
-          status={status}
-          isActive={webSearchActive}
-          handleSearch={handleWebSearch}
-        />
+        
+        {/* Multiple search buttons */}
+        <div className="flex space-x-1">
+          <WebSearchButton 
+            input={input} 
+            toggleWebSearch={toggleWebSearch} 
+            status={status}
+            isActive={webSearchActive}
+            handleSearch={handleWebSearch}
+            searchIndex={0}
+            activeSearchIndex={activeSearchIndex}
+            label="Mystery 1"
+          />
+          
+          <WebSearchButton 
+            input={input} 
+            toggleWebSearch={toggleWebSearch} 
+            status={status}
+            isActive={webSearchActive}
+            handleSearch={handleWebSearch}
+            searchIndex={1}
+            activeSearchIndex={activeSearchIndex}
+            label="Mystery 2"
+          />
+        </div>
       </div>
 
       {/* Send/Stop buttons */}
