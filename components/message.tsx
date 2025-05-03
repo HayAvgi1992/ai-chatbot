@@ -177,7 +177,9 @@ const PurePreviewMessage = ({
                       {toolName === 'getWeather' ? (
                         <Weather />
                       ) : toolName === 'createDocument' ? (
-                        <DocumentPreview isReadonly={isReadonly} args={args} />
+                        <div className="p-4 border rounded-md bg-muted">
+                          <p>Document creation is temporarily disabled</p>
+                        </div>
                       ) : toolName === 'updateDocument' ? (
                         <DocumentToolCall
                           type="update"
@@ -203,10 +205,9 @@ const PurePreviewMessage = ({
                       {toolName === 'getWeather' ? (
                         <Weather weatherAtLocation={result} />
                       ) : toolName === 'createDocument' ? (
-                        <DocumentPreview
-                          isReadonly={isReadonly}
-                          result={result}
-                        />
+                        <div className="p-4 border rounded-md bg-muted">
+                          <p>Document creation is temporarily disabled</p>
+                        </div>
                       ) : toolName === 'updateDocument' ? (
                         <DocumentToolResult
                           type="update"

@@ -165,3 +165,30 @@ I performed a Google search and found these results:
 
 Based on these sources, answer the user's question in a clear, concise, and accurate way.
 `;
+
+export const webSearchEnhancedPrompt = (formattedResults: string, input: string) => {
+  // Decode any escaped characters to ensure proper formatting
+  const decodedResults = formattedResults
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
+  
+  return `<search_results>
+${decodedResults}
+</search_results>
+
+YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
+1. You have been given search results between <search_results> tags above.
+2. The user's question is: "${input}"
+3. Answer ONLY using information from these search results.
+4. DO NOT claim you don't have access to real-time or current information.
+5. If the search results contain the answer, provide it clearly.
+6. If the search results do not contain the answer, provide a clear and concise answer based on the search results.
+7. If the search results are not relevant to the user's question, provide a clear and concise answer that you do not have access to the information.
+
+User question: ${input}`;
+};
+

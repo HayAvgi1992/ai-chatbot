@@ -23,10 +23,12 @@ const saveMessageSchema = z.object({
 
 export async function GET(
   request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = request.nextUrl;
-    const id = searchParams.get('id');
+    // Need to await params in Next.js App Router
+    const { id } = await context.params;
+    console.log("GET messages for chat ID:", id);
 
     const session = await auth();
     if (!session?.user) {
@@ -62,10 +64,12 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = request.nextUrl;
-    const chatId = searchParams.get('id');
+    // Need to await params in Next.js App Router
+    const { id: chatId } = await context.params;
+    console.log("POST message for chat ID:", chatId);
     
     const session = await auth();
     if (!session?.user) {
