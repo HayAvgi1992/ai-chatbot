@@ -4,6 +4,7 @@ import {
   createDataStreamResponse,
   smoothStream,
   streamText,
+  type CoreMessage
 } from 'ai';
 import { auth, type UserType } from '@/app/(auth)/auth';
 import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
@@ -26,6 +27,35 @@ import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
+
+// Helper function to convert database messages to CoreMessage format
+function convertToCoreMessages(messages: any[]): CoreMessage[] {
+  return messages.map(message => {
+    // For messages with parts, convert them to content
+    if (message.parts && Array.isArray(message.parts)) {
+      return {
+        role: message.role,
+        content: message.parts.map(part => 
+          part.type === 'text' ? part.text : ''
+        ).join(' ').trim()
+      };
+    }
+    
+    // For messages already having content
+    if (message.content) {
+      return {
+        role: message.role,
+        content: message.content
+      };
+    }
+    
+    // Fallback case
+    return {
+      role: message.role,
+      content: ''
+    };
+  });
+}
 
 export const maxDuration = 60;
 
@@ -108,6 +138,9 @@ export async function POST(request: Request) {
         : [{ role: 'system', content: 'You are a helpful assistant.' }];
     }
 
+    // Convert to CoreMessage format for streamText
+    const coreMessages = convertToCoreMessages(messagesForModel);
+
     const { longitude, latitude, city, country } = geolocation(request);
 
     const requestHints: RequestHints = {
@@ -144,7 +177,7 @@ export async function POST(request: Request) {
               requestHints,
               messages: messagesForModel 
             }),
-            messages: messagesForModel,
+            messages: coreMessages,
             maxSteps: 5,
             experimental_activeTools:
               selectedChatModel === 'chat-model-reasoning' || 
