@@ -5,6 +5,7 @@ import {
   StreamingTextGenerationMethod,
   TextGenerationMethod,
   RunnerMethod,
+  type ImageModel as ImageModelV1
 } from 'ai';
 import { isTestEnvironment } from '../constants';
 import { anthropic, createAnthropic } from '@ai-sdk/anthropic';
@@ -155,13 +156,32 @@ export const myProvider = {
   },
   
   // Add support for image models
-  imageModel: (modelName: string) => {
+  imageModel: (modelName: string): ImageModelV1 => {
     // This is a placeholder - If we would like to add image generation, add it
     // based on the image generation service you're using
     return {
-      name: modelName,
-      provider: 'openai',
-      // Add any additional properties needed by experimental_generateImage
+      specificationVersion: 'v1',
+      provider: 'openai', // Can be changed based on your provider
+      modelId: modelName,
+      maxImagesPerCall: 1,
+      doGenerate: async ({ prompt, n }) => {
+        // Mock implementation for now
+        console.log(`Generating ${n} image(s) with prompt: ${prompt}`);
+        
+        // Return a base64 placeholder image or make an actual API call
+        // This is just a minimal example to make the type checker happy
+        const mockBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z/C/HgAGgwJ/lK3Q6wAAAABJRU5ErkJggg==";
+        
+        return {
+          images: Array(n || 1).fill(mockBase64),
+          warnings: [],
+          response: {
+            timestamp: new Date(),
+            modelId: modelName,
+            headers: {}
+          }
+        };
+      }
     };
   }
 };
