@@ -141,75 +141,74 @@ function useFileAttachments(setAttachments: Dispatch<SetStateAction<Array<Attach
 function useWebSearch(chatId: string, setMessages: UseChatHelpers['setMessages']) {
   const [webSearchActive, setWebSearchActive] = useState(false);
   
-  // Message saving helper
-  const saveMessageToChat = async (content: string, role: 'user' | 'assistant' = 'user') => {
-    try {
-      const messageId = uuidv4();
-      // Use the /api/chat/[id]/messages endpoint 
-      const response = await fetch(`/api/chat/${chatId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: messageId,
-          role: role,
-          content: content,
-          parts: [{ type: 'text', text: content }],
-          createdAt: new Date().toISOString(),
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Failed to save message:', response.status);
-        return null;
-      }
-
-      const updatedMessages = await response.json();
-      setMessages(updatedMessages);
-      return messageId;
-    } catch (error) {
-      console.error('Error saving message:', error);
-      return null;
-    }
-  };
-
-  // Format search results helper
-  const formatSearchResults = (searchData: any): string => {
-    if (!searchData) {
-      return 'No search results found.';
-    }
-    
-    const { organic, peopleAlsoAsk } = searchData;
-    let formattedResults = '';
-    
-    // Add the organic results (text search results)
-    if (organic && Array.isArray(organic)) {
-      formattedResults += `TOP SEARCH RESULTS:\n\n`;
-      const topResults = organic.slice(0, 3); // Take top 3 results
-      
-      topResults.forEach((result, index) => {
-        formattedResults += `[${index + 1}] ${result.title}\n${result.snippet}\n\n`;
-      });
-    }
-    
-    // Add frequently asked questions if available
-    if (peopleAlsoAsk && Array.isArray(peopleAlsoAsk) && peopleAlsoAsk.length > 0) {
-      formattedResults += `FREQUENTLY ASKED QUESTIONS:\n\n`;
-      peopleAlsoAsk.slice(0, 2).forEach((item, index) => {
-        formattedResults += `Q: ${item.question}\nA: ${item.snippet}\n\n`;
-      });
-    }
-    
-    // Ensure the content doesn't exceed validation limits
-    return formattedResults.slice(0, 8000);
-  };
-
   // Handle web search
   const handleWebSearch = useCallback(async (input: string): Promise<void> => {
-    console.log("handleWebSearch called - processing search for:", input);
     const userMessageId = uuidv4();
     if (!input.trim()) return;
+    
+    // Message saving helper - moved inside the callback
+    const saveMessageToChat = async (content: string, role: 'user' | 'assistant' = 'user') => {
+      try {
+        const messageId = uuidv4();
+        // Use the /api/chat/[id]/messages endpoint 
+        const response = await fetch(`/api/chat/${chatId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: messageId,
+            role: role,
+            content: content,
+            parts: [{ type: 'text', text: content }],
+            createdAt: new Date().toISOString(),
+          }),
+        });
+
+        if (!response.ok) {
+          console.error('Failed to save message:', response.status);
+          return null;
+        }
+
+        const updatedMessages = await response.json();
+        setMessages(updatedMessages);
+        return messageId;
+      } catch (error) {
+        console.error('Error saving message:', error);
+        return null;
+      }
+    };
+    
+    // Format search results helper - moved inside the callback
+    const formatSearchResults = (searchData: any): string => {
+      if (!searchData) {
+        return 'No search results found.';
+      }
+      
+      const { organic, peopleAlsoAsk } = searchData;
+      let formattedResults = '';
+      
+      // Add the organic results (text search results)
+      if (organic && Array.isArray(organic)) {
+        formattedResults += `TOP SEARCH RESULTS:\n\n`;
+        const topResults = organic.slice(0, 3); // Take top 3 results
+        
+        topResults.forEach((result, index) => {
+          formattedResults += `[${index + 1}] ${result.title}\n${result.snippet}\n\n`;
+        });
+      }
+      
+      // Add frequently asked questions if available
+      if (peopleAlsoAsk && Array.isArray(peopleAlsoAsk) && peopleAlsoAsk.length > 0) {
+        formattedResults += `FREQUENTLY ASKED QUESTIONS:\n\n`;
+        peopleAlsoAsk.slice(0, 2).forEach((item, index) => {
+          formattedResults += `Q: ${item.question}\nA: ${item.snippet}\n\n`;
+        });
+      }
+      
+      // Ensure the content doesn't exceed validation limits
+      return formattedResults.slice(0, 8000);
+    };
     
     const toastId = 'web-search-toast';
     toast.loading('Searching the web...', { id: toastId });
@@ -253,6 +252,8 @@ YOU MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
 3. Answer ONLY using information from these search results.
 4. DO NOT claim you don't have access to real-time or current information.
 5. If the search results contain the answer, provide it clearly.
+6. If the search results do not contain the answer, provide a clear and concise answer based on the search results.
+7. If the search results are not relevant to the user's question, provide a clear and concise answer that you do not have access to the information.
 
 User question: ${input}`;
 
@@ -337,7 +338,7 @@ User question: ${input}`;
     } finally {
       setWebSearchActive(false);
     }
-  }, [chatId, saveMessageToChat, setMessages]);
+  }, [chatId, setMessages]);
 
   // Toggle web search mode
   const toggleWebSearch = useCallback(() => {

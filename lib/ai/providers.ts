@@ -2,8 +2,7 @@ import {
   LanguageModelV1,
   type ImageModel as ImageModelV1
 } from 'ai';
-import { isTestEnvironment } from '../constants';
-import { anthropic, createAnthropic } from '@ai-sdk/anthropic';
+import { createAnthropic } from '@ai-sdk/anthropic';
 
 // Initialize the Anthropic provider with API key from environment variables
 const anthropicProvider = createAnthropic({

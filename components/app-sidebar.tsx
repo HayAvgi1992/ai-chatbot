@@ -2,6 +2,7 @@
 
 import type { User } from 'next-auth';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 import { PlusIcon } from '@/components/icons';
 import { SidebarHistory } from '@/components/sidebar-history';
@@ -34,8 +35,15 @@ export function AppSidebar({ user }: { user: User | undefined }) {
               }}
               className="flex flex-row gap-3 items-center"
             >
+              <Image 
+                src="/images/poppy-skull.png" 
+                alt="PoppyAI"
+                width={28} 
+                height={28}
+                priority
+              />
               <span className="text-lg font-semibold px-2 hover:bg-muted rounded-md cursor-pointer">
-                Chatbot
+                PoppyAI
               </span>
             </Link>
             <Tooltip>
