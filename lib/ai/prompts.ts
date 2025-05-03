@@ -57,15 +57,17 @@ export const systemPrompt = ({
 }: {
   selectedChatModel: string;
   requestHints: RequestHints;
-  messages?: Array<{content: string}>;
+  messages?: Array<any>;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
   
   // Check if the most recent message contains search results
   const lastMessage = messages && messages.length > 0 ? messages[messages.length - 1] : null;
-  const containsSearchResults = lastMessage?.content && 
-    (lastMessage.content.includes('<search_results>') || 
-     lastMessage.content.toLowerCase().includes('web search results'));
+  const containsSearchResults = lastMessage && 
+    (typeof lastMessage.content === 'string' && (
+      lastMessage.content.includes('<search_results>') || 
+      lastMessage.content.toLowerCase().includes('web search results')
+    ));
   
   if (containsSearchResults) {
     // Special system prompt override for web search results
